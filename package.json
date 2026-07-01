@@ -1,6 +1,6 @@
 {
   "name": "@doscientos/verifactu",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Framework-agnostic Verifactu (AEAT) invoice submission, SIF hash chain and QR generation for Node.js.",
   "keywords": [
     "verifactu",
