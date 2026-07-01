@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { format } from "date-fns-tz";
+import { formatInTimeZone } from "date-fns-tz";
 
 /**
  * Verifactu / SIF hash chain (Anexo I, Orden HAC/1177/2024).
@@ -13,27 +13,27 @@ import { format } from "date-fns-tz";
  *   ImporteTotal & HuellaAnterior & FechaHoraHusoHorarioFirma
  */
 export type HashInput = {
-  nif: string;
-  invoiceNumber: string;
-  invoiceType: string;
-  issueDate: Date;
-  taxAmount: number;
-  total: number;
-  previousHash: string | null;
-  generatedAt: Date;
+	nif: string;
+	invoiceNumber: string;
+	invoiceType: string;
+	issueDate: Date;
+	taxAmount: number;
+	total: number;
+	previousHash: string | null;
+	generatedAt: Date;
 };
 
 const MADRID_TZ = "Europe/Madrid";
 
 function ddmmyyyy(d: Date): string {
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const yyyy = String(d.getUTCFullYear());
-  return `${dd}-${mm}-${yyyy}`;
+	const dd = String(d.getUTCDate()).padStart(2, "0");
+	const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+	const yyyy = String(d.getUTCFullYear());
+	return `${dd}-${mm}-${yyyy}`;
 }
 
 function n2(x: number): string {
-  return x.toFixed(2);
+	return x.toFixed(2);
 }
 
 /**
@@ -41,23 +41,29 @@ function n2(x: number): string {
  * as required by FechaHoraHusoHorarioFirma (Anexo I, HAC/1177/2024).
  */
 export function spanishTimestamp(d: Date): string {
-  return format(d, "dd-MM-yyyy'T'HH:mm:ssxxx", { timeZone: MADRID_TZ });
+	return formatInTimeZone(d, MADRID_TZ, "dd-MM-yyyy'T'HH:mm:ssxxx");
 }
 
 export function buildHashPayload(input: HashInput): string {
-  const previous = input.previousHash && input.previousHash.length > 0 ? input.previousHash : "0";
-  return [
-    input.nif,
-    input.invoiceNumber,
-    ddmmyyyy(input.issueDate), // FechaExpedicion — position 3 per Anexo I
-    input.invoiceType, // TipoFactura — position 4 per Anexo I
-    n2(input.taxAmount),
-    n2(input.total),
-    previous,
-    spanishTimestamp(input.generatedAt),
-  ].join("&"); // separator is `&` per Anexo I
+	const previous =
+		input.previousHash && input.previousHash.length > 0
+			? input.previousHash
+			: "0";
+	return [
+		input.nif,
+		input.invoiceNumber,
+		ddmmyyyy(input.issueDate), // FechaExpedicion — position 3 per Anexo I
+		input.invoiceType, // TipoFactura — position 4 per Anexo I
+		n2(input.taxAmount),
+		n2(input.total),
+		previous,
+		spanishTimestamp(input.generatedAt),
+	].join("&"); // separator is `&` per Anexo I
 }
 
 export function computeInvoiceHash(input: HashInput): string {
-  return createHash("sha256").update(buildHashPayload(input), "utf8").digest("hex").toUpperCase();
+	return createHash("sha256")
+		.update(buildHashPayload(input), "utf8")
+		.digest("hex")
+		.toUpperCase();
 }
