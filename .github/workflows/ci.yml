@@ -33,14 +33,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
 
-  # ── 2. Tests (Node 18 / 20 / 22 matrix) ─────────────────────────────────────
+  # ── 2. Tests (Node 20 / 22 matrix) ─────────────────────────────────────
   test:
     name: Test / Node ${{ matrix.node }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node: [18, 20, 22]
+        node: [20, 22]
     steps:
       - uses: actions/checkout@v4
 
