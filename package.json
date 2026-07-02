@@ -12,6 +12,15 @@
     "tax"
   ],
   "license": "MIT",
+  "author": "Doscientos <dev@doscientos.es>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/doscientos-es/verifactu.git"
+  },
+  "homepage": "https://github.com/doscientos-es/verifactu#readme",
+  "bugs": {
+    "url": "https://github.com/doscientos-es/verifactu/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=18"
