@@ -4,7 +4,7 @@
 
 /** AEAT "ValidarQR" cotejo endpoints, keyed by `VERIFACTU_ENV`. */
 export const AEAT_VALIDATE_QR_URL = {
-	prod: "https://www1.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR",
+	prod: "https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR",
 	test: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR",
 } as const;
 
