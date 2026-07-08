@@ -89,6 +89,8 @@ export function buildVerifactuXml(
 	hash: string,
 	software: VerifactuSoftware,
 ): string {
+	const SUM_LR =
+		"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd";
 	const SUM =
 		"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd";
 
@@ -96,27 +98,27 @@ export function buildVerifactuXml(
 	const encadenamiento =
 		input.previousHash && input.previousInvoiceNumber && input.previousIssueDate
 			? [
-					"      <sum:Encadenamiento>",
-					"        <sum:RegistroAnterior>",
-					`          <sum:IDEmisorFacturaAnterior>${esc(input.nif)}</sum:IDEmisorFacturaAnterior>`,
-					`          <sum:NumSerieFacturaAnterior>${esc(input.previousInvoiceNumber)}</sum:NumSerieFacturaAnterior>`,
-					`          <sum:FechaExpedicionFacturaAnterior>${ddmmyyyy(input.previousIssueDate)}</sum:FechaExpedicionFacturaAnterior>`,
-					`          <sum:Huella>${esc(input.previousHash)}</sum:Huella>`,
-					"        </sum:RegistroAnterior>",
-					"      </sum:Encadenamiento>",
+					"      <sf:Encadenamiento>",
+					"        <sf:RegistroAnterior>",
+					`          <sf:IDEmisorFacturaAnterior>${esc(input.nif)}</sf:IDEmisorFacturaAnterior>`,
+					`          <sf:NumSerieFacturaAnterior>${esc(input.previousInvoiceNumber)}</sf:NumSerieFacturaAnterior>`,
+					`          <sf:FechaExpedicionFacturaAnterior>${ddmmyyyy(input.previousIssueDate)}</sf:FechaExpedicionFacturaAnterior>`,
+					`          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
+					"        </sf:RegistroAnterior>",
+					"      </sf:Encadenamiento>",
 				].join("\n")
-			: "      <sum:Encadenamiento><sum:PrimerRegistro>S</sum:PrimerRegistro></sum:Encadenamiento>";
+			: "      <sf:Encadenamiento><sf:PrimerRegistro>S</sf:PrimerRegistro></sf:Encadenamiento>";
 
 	// Destinatarios: required for F1 (full invoice) when client NIF is known
 	const destinatarios =
 		input.invoiceType === "F1" && input.clientNif
 			? [
-					"      <sum:Destinatarios>",
-					"        <sum:IDDestinatario>",
-					`          <sum:NombreRazon>${esc(input.clientName ?? "")}</sum:NombreRazon>`,
-					`          <sum:NIF>${esc(input.clientNif)}</sum:NIF>`,
-					"        </sum:IDDestinatario>",
-					"      </sum:Destinatarios>",
+					"      <sf:Destinatarios>",
+					"        <sf:IDDestinatario>",
+					`          <sf:NombreRazon>${esc(input.clientName ?? "")}</sf:NombreRazon>`,
+					`          <sf:NIF>${esc(input.clientNif)}</sf:NIF>`,
+					"        </sf:IDDestinatario>",
+					"      </sf:Destinatarios>",
 				].join("\n")
 			: null;
 
@@ -124,60 +126,60 @@ export function buildVerifactuXml(
 	const desgloseLines = input.vatLines
 		.map((l) =>
 			[
-				"        <sum:DetalleDesglose>",
-				"          <sum:ClaveRegimen>01</sum:ClaveRegimen>",
-				"          <sum:CalificacionOperacion>S1</sum:CalificacionOperacion>",
-				`          <sum:TipoImpositivo>${l.rate.toFixed(2)}</sum:TipoImpositivo>`,
-				`          <sum:BaseImponibleOImporteNoSujeto>${l.base.toFixed(2)}</sum:BaseImponibleOImporteNoSujeto>`,
-				`          <sum:CuotaRepercutida>${l.tax.toFixed(2)}</sum:CuotaRepercutida>`,
-				"        </sum:DetalleDesglose>",
+				"        <sf:DetalleDesglose>",
+				"          <sf:ClaveRegimen>01</sf:ClaveRegimen>",
+				"          <sf:CalificacionOperacion>S1</sf:CalificacionOperacion>",
+				`          <sf:TipoImpositivo>${l.rate.toFixed(2)}</sf:TipoImpositivo>`,
+				`          <sf:BaseImponibleOImporteNoSujeto>${l.base.toFixed(2)}</sf:BaseImponibleOImporteNoSujeto>`,
+				`          <sf:CuotaRepercutida>${l.tax.toFixed(2)}</sf:CuotaRepercutida>`,
+				"        </sf:DetalleDesglose>",
 			].join("\n"),
 		)
 		.join("\n");
 
 	return [
-		`<sum:RegFactuSistemaFacturacion xmlns:sum="${SUM}">`,
-		"  <sum:Cabecera>",
-		"    <sum:ObligadoEmision>",
-		`      <sum:NombreRazon>${esc(input.emisorName)}</sum:NombreRazon>`,
-		`      <sum:NIF>${esc(input.nif)}</sum:NIF>`,
-		"    </sum:ObligadoEmision>",
-		"  </sum:Cabecera>",
-		"  <sum:RegistroFactura>",
-		"    <sum:RegistroAlta>",
-		"      <sum:IDVersion>1.0</sum:IDVersion>",
-		"      <sum:IDFactura>",
-		`        <sum:IDEmisorFactura>${esc(input.nif)}</sum:IDEmisorFactura>`,
-		`        <sum:NumSerieFactura>${esc(input.invoiceNumber)}</sum:NumSerieFactura>`,
-		`        <sum:FechaExpedicionFactura>${ddmmyyyy(input.issueDate)}</sum:FechaExpedicionFactura>`,
-		"      </sum:IDFactura>",
-		`      <sum:NombreRazonEmisor>${esc(input.emisorName)}</sum:NombreRazonEmisor>`,
-		`      <sum:TipoFactura>${esc(input.invoiceType)}</sum:TipoFactura>`,
-		`      <sum:DescripcionOperacion>${esc(input.descriptionOperacion.slice(0, 250))}</sum:DescripcionOperacion>`,
+		`<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="${SUM_LR}" xmlns:sf="${SUM}">`,
+		"  <sfLR:Cabecera>",
+		"    <sf:ObligadoEmision>",
+		`      <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
+		`      <sf:NIF>${esc(input.nif)}</sf:NIF>`,
+		"    </sf:ObligadoEmision>",
+		"  </sfLR:Cabecera>",
+		"  <sfLR:RegistroFactura>",
+		"    <sf:RegistroAlta>",
+		"      <sf:IDVersion>1.0</sf:IDVersion>",
+		"      <sf:IDFactura>",
+		`        <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
+		`        <sf:NumSerieFactura>${esc(input.invoiceNumber)}</sf:NumSerieFactura>`,
+		`        <sf:FechaExpedicionFactura>${ddmmyyyy(input.issueDate)}</sf:FechaExpedicionFactura>`,
+		"      </sf:IDFactura>",
+		`      <sf:NombreRazonEmisor>${esc(input.emisorName)}</sf:NombreRazonEmisor>`,
+		`      <sf:TipoFactura>${esc(input.invoiceType)}</sf:TipoFactura>`,
+		`      <sf:DescripcionOperacion>${esc(input.descriptionOperacion.slice(0, 250))}</sf:DescripcionOperacion>`,
 		destinatarios,
-		"      <sum:Desglose>",
+		"      <sf:Desglose>",
 		desgloseLines,
-		"      </sum:Desglose>",
-		`      <sum:CuotaTotal>${input.taxAmount.toFixed(2)}</sum:CuotaTotal>`,
-		`      <sum:ImporteTotal>${input.total.toFixed(2)}</sum:ImporteTotal>`,
+		"      </sf:Desglose>",
+		`      <sf:CuotaTotal>${input.taxAmount.toFixed(2)}</sf:CuotaTotal>`,
+		`      <sf:ImporteTotal>${input.total.toFixed(2)}</sf:ImporteTotal>`,
 		encadenamiento,
-		"      <sum:SistemaInformatico>",
-		`        <sum:NombreRazon>${esc(input.emisorName)}</sum:NombreRazon>`,
-		`        <sum:NIF>${esc(input.nif)}</sum:NIF>`,
-		`        <sum:NombreSistemaInformatico>${esc(software.name)}</sum:NombreSistemaInformatico>`,
-		`        <sum:IdSistemaInformatico>${esc(software.id)}</sum:IdSistemaInformatico>`,
-		`        <sum:Version>${esc(software.version)}</sum:Version>`,
-		`        <sum:NumeroInstalacion>${esc(software.installationNumber)}</sum:NumeroInstalacion>`,
-		"        <sum:TipoUsoPosibleSoloVerifactu>S</sum:TipoUsoPosibleSoloVerifactu>",
-		"        <sum:TipoUsoPosibleMultiOT>N</sum:TipoUsoPosibleMultiOT>",
-		"        <sum:IndicadorMultiples>N</sum:IndicadorMultiples>",
-		"      </sum:SistemaInformatico>",
-		`      <sum:FechaHoraHusoGenRegistro>${spanishTimestamp(input.generatedAt)}</sum:FechaHoraHusoGenRegistro>`,
-		"      <sum:TipoHuella>01</sum:TipoHuella>",
-		`      <sum:Huella>${esc(hash)}</sum:Huella>`,
-		"    </sum:RegistroAlta>",
-		"  </sum:RegistroFactura>",
-		"</sum:RegFactuSistemaFacturacion>",
+		"      <sf:SistemaInformatico>",
+		`        <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
+		`        <sf:NIF>${esc(input.nif)}</sf:NIF>`,
+		`        <sf:NombreSistemaInformatico>${esc(software.name)}</sf:NombreSistemaInformatico>`,
+		`        <sf:IdSistemaInformatico>${esc(software.id)}</sf:IdSistemaInformatico>`,
+		`        <sf:Version>${esc(software.version)}</sf:Version>`,
+		`        <sf:NumeroInstalacion>${esc(software.installationNumber)}</sf:NumeroInstalacion>`,
+		"        <sf:TipoUsoPosibleSoloVerifactu>S</sf:TipoUsoPosibleSoloVerifactu>",
+		"        <sf:TipoUsoPosibleMultiOT>N</sf:TipoUsoPosibleMultiOT>",
+		"        <sf:IndicadorMultiples>N</sf:IndicadorMultiples>",
+		"      </sf:SistemaInformatico>",
+		`      <sf:FechaHoraHusoGenRegistro>${spanishTimestamp(input.generatedAt)}</sf:FechaHoraHusoGenRegistro>`,
+		"      <sf:TipoHuella>01</sf:TipoHuella>",
+		`      <sf:Huella>${esc(hash)}</sf:Huella>`,
+		"    </sf:RegistroAlta>",
+		"  </sfLR:RegistroFactura>",
+		"</sfLR:RegFactuSistemaFacturacion>",
 	]
 		.filter((l) => l !== null)
 		.join("\n");
