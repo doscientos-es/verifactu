@@ -37,11 +37,11 @@ function n2(x: number): string {
 }
 
 /**
- * Returns DD-MM-YYYYTHH:MM:SS+HH:MM in Europe/Madrid local time,
- * as required by FechaHoraHusoHorarioFirma (Anexo I, HAC/1177/2024).
+ * Returns YYYY-MM-DDTHH:MM:SS+HH:MM (ISO 8601 / xs:dateTime) in Europe/Madrid
+ * local time, as required by FechaHoraHusoGenRegistro (Anexo I, HAC/1177/2024).
  */
 export function spanishTimestamp(d: Date): string {
-	return formatInTimeZone(d, MADRID_TZ, "dd-MM-yyyy'T'HH:mm:ssxxx");
+	return formatInTimeZone(d, MADRID_TZ, "yyyy-MM-dd'T'HH:mm:ssxxx");
 }
 
 export function buildHashPayload(input: HashInput): string {

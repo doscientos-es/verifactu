@@ -99,7 +99,7 @@ describe("verifactu/client", () => {
 			          <sf:ClaveRegimen>01</sf:ClaveRegimen>
 			          <sf:CalificacionOperacion>S1</sf:CalificacionOperacion>
 			          <sf:TipoImpositivo>21.00</sf:TipoImpositivo>
-			          <sf:BaseImponibleOImporteNoSujeto>100.00</sf:BaseImponibleOImporteNoSujeto>
+			          <sf:BaseImponibleOimporteNoSujeto>100.00</sf:BaseImponibleOimporteNoSujeto>
 			          <sf:CuotaRepercutida>21.00</sf:CuotaRepercutida>
 			        </sf:DetalleDesglose>
 			      </sf:Desglose>
@@ -115,9 +115,9 @@ describe("verifactu/client", () => {
 			        <sf:NumeroInstalacion>00000001</sf:NumeroInstalacion>
 			        <sf:TipoUsoPosibleSoloVerifactu>S</sf:TipoUsoPosibleSoloVerifactu>
 			        <sf:TipoUsoPosibleMultiOT>N</sf:TipoUsoPosibleMultiOT>
-			        <sf:IndicadorMultiples>N</sf:IndicadorMultiples>
+			        <sf:IndicadorMultiplesOT>N</sf:IndicadorMultiplesOT>
 			      </sf:SistemaInformatico>
-			      <sf:FechaHoraHusoGenRegistro>15-03-2026T13:00:00+01:00</sf:FechaHoraHusoGenRegistro>
+			      <sf:FechaHoraHusoGenRegistro>2026-03-15T13:00:00+01:00</sf:FechaHoraHusoGenRegistro>
 			      <sf:TipoHuella>01</sf:TipoHuella>
 			      <sf:Huella>GOLDENHASH</sf:Huella>
 			    </sf:RegistroAlta>
