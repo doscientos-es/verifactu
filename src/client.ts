@@ -196,6 +196,7 @@ function parseSoapResponse(body: string): {
 	status: "accepted" | "rejected";
 	aeatCode: string | null;
 	aeatDescription: string | null;
+	soapFault: string | null;
 } {
 	const parser = new XMLParser({
 		ignoreAttributes: false,
@@ -208,6 +209,8 @@ function parseSoapResponse(body: string): {
 	const resp = soapBody?.RespuestaRegFactuSistemaFacturacion as
 		| Record<string, unknown>
 		| undefined;
+	const fault = soapBody?.Fault as Record<string, unknown> | undefined;
+	const soapFault = fault?.faultstring ? String(fault.faultstring) : null;
 
 	const estadoEnvio = String(resp?.EstadoEnvio ?? "");
 	const csv = resp?.CSV ? String(resp.CSV) : null;
@@ -231,7 +234,7 @@ function parseSoapResponse(body: string): {
 			? String(firstLinea.DescripcionErrorRegistro)
 			: null;
 
-	return { csv, status, aeatCode, aeatDescription };
+	return { csv, status, aeatCode, aeatDescription, soapFault };
 }
 
 function mockCsv(hash: string): string {
@@ -364,7 +367,7 @@ export async function submitToVerifactu(
 			csv: null,
 			hash,
 			idfact,
-			response: { error: "certificate not configured" },
+			response: { kind: "certificate_missing" },
 			errorMessage:
 				"Certificado P12 no configurado (VERIFACTU_CERT_P12_BASE64 / VERIFACTU_CERT_PASSWORD)",
 			errorCode: "cert_missing",
@@ -382,7 +385,7 @@ export async function submitToVerifactu(
 			csv: null,
 			hash,
 			idfact,
-			response: { error: String(err) },
+			response: { kind: "certificate_error" },
 			errorMessage: `Error cargando certificado: ${String(err)}`,
 			errorCode: "cert_invalid",
 			aeatCode: null,
@@ -421,7 +424,7 @@ export async function submitToVerifactu(
 			csv: null,
 			hash,
 			idfact,
-			response: { error: String(err) },
+			response: { kind: "network_error" },
 			errorMessage: `Error de conexión${certificateHint}: ${detail}`,
 			errorCode: "network_error",
 			aeatCode: null,
@@ -435,14 +438,14 @@ export async function submitToVerifactu(
 			csv: null,
 			hash,
 			idfact,
-			response: { httpStatus, body: rawResponse },
+			response: { kind: "http_error", httpStatus },
 			errorMessage: `AEAT HTTP ${httpStatus}`,
 			errorCode: "http_error",
 			aeatCode: null,
 		};
 	}
 
-	const { csv, status, aeatCode, aeatDescription } =
+	const { csv, status, aeatCode, aeatDescription, soapFault } =
 		parseSoapResponse(rawResponse);
 	logger.info(
 		{ invoice: input.invoiceNumber, csv, status, aeatCode },
@@ -453,10 +456,17 @@ export async function submitToVerifactu(
 		csv,
 		hash,
 		idfact,
-		response: { rawResponse, aeatCode, aeatDescription },
+		response: {
+			kind: "aeat_response",
+			httpStatus,
+			csv,
+			aeatCode,
+			aeatDescription,
+			soapFault,
+		},
 		errorMessage:
 			status === "rejected"
-				? (aeatDescription ?? "AEAT rechazó el registro")
+				? (aeatDescription ?? soapFault ?? "AEAT rechazó el registro")
 				: null,
 		errorCode: status === "rejected" ? "aeat_rejected" : null,
 		aeatCode: status === "rejected" ? aeatCode : null,
