@@ -178,6 +178,17 @@ describe("verifactu/client", () => {
 		expect(result.errorMessage).toMatch(/certificado|certificate/i);
 	});
 
+	it("reports malformed certificate Base64 before attempting TLS", async () => {
+		const result = await submitToVerifactu(baseInput, {
+			...mockConfig,
+			environment: "test",
+			certificate: { p12Base64: "data:application/x-pkcs12;base64,AAAA", password: "x" },
+		});
+		expect(result.status).toBe("error");
+		expect(result.errorCode).toBe("cert_invalid");
+		expect(result.errorMessage).toMatch(/data URL|Base64/i);
+	});
+
 	it("computes the same hash twice for the same payload (determinism)", async () => {
 		const a = await submitToVerifactu(baseInput, mockConfig);
 		const b = await submitToVerifactu(baseInput, mockConfig);

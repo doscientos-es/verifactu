@@ -4,7 +4,7 @@ import { AEAT_SOAP_ACTION_ALTA, AEAT_SOAP_ENDPOINT } from "./constants";
 import { computeInvoiceHash, spanishTimestamp } from "./hash";
 import { buildIdfact } from "./idfact";
 import { type VerifactuLogger, noopLogger } from "./logger";
-import { loadP12Cert } from "./sign";
+import { decodeP12Base64, loadP12Cert } from "./sign";
 import type { VerifactuConfig, VerifactuSoftware } from "./types";
 import { validateVerifactuXml } from "./validate";
 
@@ -389,7 +389,10 @@ export async function submitToVerifactu(
 		};
 	}
 
-	const pfxBuf = Buffer.from(config.certificate.p12Base64, "base64");
+	// Use the same strict decoder as the preflight check. Buffer.from(...)
+	// silently discards invalid Base64 characters, which can turn a damaged
+	// environment variable into a different/truncated certificate at TLS time.
+	const pfxBuf = decodeP12Base64(config.certificate.p12Base64);
 	const soapBody = buildSoapEnvelope(xml);
 	const endpoint = AEAT_SOAP_ENDPOINT[config.environment];
 
@@ -407,13 +410,19 @@ export async function submitToVerifactu(
 		httpStatus = res.status;
 	} catch (err) {
 		logger.error({ err, endpoint }, "verifactu_network_error");
+		const detail = String(err);
+		const certificateHint = /asn(?:\.1|1)|pfx|pkcs.?12|certificate|certificado|tls|openssl/i.test(
+			detail,
+		)
+			? " (revisar VERIFACTU_CERT_P12_BASE64, contraseña y certificado cliente)"
+			: "";
 		return {
 			status: "error",
 			csv: null,
 			hash,
 			idfact,
 			response: { error: String(err) },
-			errorMessage: `Error de red: ${String(err)}`,
+			errorMessage: `Error de conexión${certificateHint}: ${detail}`,
 			errorCode: "network_error",
 			aeatCode: null,
 		};

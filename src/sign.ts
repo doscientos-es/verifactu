@@ -30,10 +30,26 @@ export interface P12Cert {
   privateKey: forge.pki.rsa.PrivateKey;
 }
 
+/** Decode the configured PKCS#12 value without silently accepting bad input. */
+export function decodeP12Base64(p12Base64: string): Buffer {
+  const value = p12Base64.replace(/\s/g, "");
+  if (/^data:/i.test(value)) {
+    throw new Error("PKCS12: se recibió una data URL; configure solo el Base64 del archivo .p12/.pfx");
+  }
+  if (!value || !/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length % 4 === 1) {
+    throw new Error("PKCS12: VERIFACTU_CERT_P12_BASE64 no es Base64 válido o está truncado");
+  }
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.length < 16) {
+    throw new Error("PKCS12: el certificado Base64 está vacío o incompleto");
+  }
+  return decoded;
+}
+
 /** Load a PKCS12 (.p12) and extract the signing certificate and private key. */
 export function loadP12Cert(p12Base64: string, password: string): P12Cert {
-  const p12Buf = Buffer.from(p12Base64, "base64");
-  const p12Asn1 = forge.asn1.fromDer(forge.util.createBuffer(p12Buf));
+  const p12Buf = decodeP12Base64(p12Base64);
+  const p12Asn1 = forge.asn1.fromDer(forge.util.createBuffer(p12Buf.toString("binary")));
   const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, false, password);
 
   const certBagType = forge.pki.oids.certBag as string;
