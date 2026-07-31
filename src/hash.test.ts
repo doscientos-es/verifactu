@@ -14,14 +14,34 @@ const baseInput = {
 } as const;
 
 describe("verifactu hash", () => {
-  it("uses '0' as previous_hash for the first invoice", () => {
+  it("sends an empty Huella for the first invoice of the chain", () => {
     const payload = buildHashPayload(baseInput);
-    expect(payload).toContain("&0&");
+    expect(payload).toContain("&Huella=&");
   });
 
   it("formats issue date as DD-MM-YYYY", () => {
     const payload = buildHashPayload(baseInput);
-    expect(payload).toContain("25-05-2026");
+    expect(payload).toContain("FechaExpedicionFactura=25-05-2026");
+  });
+
+  // Official AEAT vector (Especificaciones huella v0.1.2, apartado 6.1).
+  it("matches the official AEAT RegistroAlta vector", () => {
+    const input = {
+      nif: "89890001K",
+      invoiceNumber: "12345678/G33",
+      invoiceType: "F1",
+      issueDate: new Date(Date.UTC(2024, 0, 1)),
+      taxAmount: 12.35,
+      total: 123.45,
+      previousHash: null,
+      generatedAt: new Date("2024-01-01T19:20:30+01:00"),
+    };
+    expect(buildHashPayload(input)).toBe(
+      "IDEmisorFactura=89890001K&NumSerieFactura=12345678/G33&FechaExpedicionFactura=01-01-2024&TipoFactura=F1&CuotaTotal=12.35&ImporteTotal=123.45&Huella=&FechaHoraHusoGenRegistro=2024-01-01T19:20:30+01:00",
+    );
+    expect(computeInvoiceHash(input)).toBe(
+      "3C464DAF61ACB827C65FDA19F352A4E3BDC2C640E9E9FC4CC058073F38F12F60",
+    );
   });
 
   it("produces a deterministic SHA-256 uppercase hex hash", () => {
@@ -39,8 +59,8 @@ describe("verifactu hash", () => {
 
   it("formats amounts with 2 decimals", () => {
     const payload = buildHashPayload({ ...baseInput, taxAmount: 21, total: 121 });
-    expect(payload).toContain("&21.00&");
-    expect(payload).toContain("&121.00&");
+    expect(payload).toContain("CuotaTotal=21.00");
+    expect(payload).toContain("ImporteTotal=121.00");
   });
 });
 

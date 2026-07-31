@@ -1,39 +1,42 @@
-import { createHash } from "node:crypto";
 import { formatInTimeZone } from "date-fns-tz";
+import { createHash } from "node:crypto";
 
 /**
- * Verifactu / SIF hash chain (Anexo I, Orden HAC/1177/2024).
+ * Verifactu / SIF hash chain (Anexo I, Orden HAC/1177/2024; AEAT "Especificaciones
+ * técnicas para la generación de la huella" v0.1.2).
  *
- * Each invoice's `current_hash` is SHA-256 of the concatenated fiscal fields
- * separated by `&`, returned as UPPERCASE hex (64 chars).
- * The first invoice of the chain uses '0' as `previous_hash`.
+ * Each invoice's `current_hash` is SHA-256 of a `clave=valor` string joined by
+ * `&`, returned as UPPERCASE hex (64 chars). The keys are mandatory — AEAT
+ * rejects value-only concatenations with CodigoErrorRegistro 2000.
  *
- * Field order (Anexo I):
- *   NIF & NumSerie & FechaExpedicion & TipoFactura & CuotaTotal &
- *   ImporteTotal & HuellaAnterior & FechaHoraHusoHorarioFirma
+ * Field order (RegistroAlta):
+ *   IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura, TipoFactura,
+ *   CuotaTotal, ImporteTotal, Huella, FechaHoraHusoGenRegistro
+ *
+ * The first invoice of the chain sends `Huella=` (empty), not `0`.
  */
 export type HashInput = {
-	nif: string;
-	invoiceNumber: string;
-	invoiceType: string;
-	issueDate: Date;
-	taxAmount: number;
-	total: number;
-	previousHash: string | null;
-	generatedAt: Date;
+  nif: string;
+  invoiceNumber: string;
+  invoiceType: string;
+  issueDate: Date;
+  taxAmount: number;
+  total: number;
+  previousHash: string | null;
+  generatedAt: Date;
 };
 
 const MADRID_TZ = "Europe/Madrid";
 
 function ddmmyyyy(d: Date): string {
-	const dd = String(d.getUTCDate()).padStart(2, "0");
-	const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-	const yyyy = String(d.getUTCFullYear());
-	return `${dd}-${mm}-${yyyy}`;
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getUTCFullYear());
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 function n2(x: number): string {
-	return x.toFixed(2);
+  return x.toFixed(2);
 }
 
 /**
@@ -41,29 +44,26 @@ function n2(x: number): string {
  * local time, as required by FechaHoraHusoGenRegistro (Anexo I, HAC/1177/2024).
  */
 export function spanishTimestamp(d: Date): string {
-	return formatInTimeZone(d, MADRID_TZ, "yyyy-MM-dd'T'HH:mm:ssxxx");
+  return formatInTimeZone(d, MADRID_TZ, "yyyy-MM-dd'T'HH:mm:ssxxx");
 }
 
 export function buildHashPayload(input: HashInput): string {
-	const previous =
-		input.previousHash && input.previousHash.length > 0
-			? input.previousHash
-			: "0";
-	return [
-		input.nif,
-		input.invoiceNumber,
-		ddmmyyyy(input.issueDate), // FechaExpedicion — position 3 per Anexo I
-		input.invoiceType, // TipoFactura — position 4 per Anexo I
-		n2(input.taxAmount),
-		n2(input.total),
-		previous,
-		spanishTimestamp(input.generatedAt),
-	].join("&"); // separator is `&` per Anexo I
+  const previous = input.previousHash?.trim() ?? "";
+  return [
+    `IDEmisorFactura=${input.nif.trim()}`,
+    `NumSerieFactura=${input.invoiceNumber.trim()}`,
+    `FechaExpedicionFactura=${ddmmyyyy(input.issueDate)}`,
+    `TipoFactura=${input.invoiceType.trim()}`,
+    `CuotaTotal=${n2(input.taxAmount)}`,
+    `ImporteTotal=${n2(input.total)}`,
+    `Huella=${previous}`,
+    `FechaHoraHusoGenRegistro=${spanishTimestamp(input.generatedAt)}`,
+  ].join("&");
 }
 
 export function computeInvoiceHash(input: HashInput): string {
-	return createHash("sha256")
-		.update(buildHashPayload(input), "utf8")
-		.digest("hex")
-		.toUpperCase();
+  return createHash("sha256")
+    .update(buildHashPayload(input), "utf8")
+    .digest("hex")
+    .toUpperCase();
 }

@@ -1,5 +1,5 @@
-import https from "node:https";
 import { XMLParser } from "fast-xml-parser";
+import https from "node:https";
 import { AEAT_SOAP_ACTION_ALTA, AEAT_SOAP_ENDPOINT } from "./constants";
 import { computeInvoiceHash, spanishTimestamp } from "./hash";
 import { buildIdfact } from "./idfact";
@@ -11,22 +11,22 @@ import { validateVerifactuXml } from "./validate";
 export type VatLine = { rate: number; base: number; tax: number };
 
 export type VerifactuSubmitInput = {
-	nif: string;
-	invoiceNumber: string;
-	invoiceType: string;
-	issueDate: Date;
-	taxAmount: number;
-	total: number;
-	previousHash: string | null;
-	generatedAt: Date;
-	emisorName: string;
-	clientNif: string | null;
-	clientName: string | null;
-	descriptionOperacion: string;
-	vatLines: VatLine[];
-	/** Required for Encadenamiento.RegistroAnterior (non-first invoices). */
-	previousInvoiceNumber: string | null;
-	previousIssueDate: Date | null;
+  nif: string;
+  invoiceNumber: string;
+  invoiceType: string;
+  issueDate: Date;
+  taxAmount: number;
+  total: number;
+  previousHash: string | null;
+  generatedAt: Date;
+  emisorName: string;
+  clientNif: string | null;
+  clientName: string | null;
+  descriptionOperacion: string;
+  vatLines: VatLine[];
+  /** Required for Encadenamiento.RegistroAnterior (non-first invoices). */
+  previousInvoiceNumber: string | null;
+  previousIssueDate: Date | null;
 };
 
 /**
@@ -40,38 +40,38 @@ export type VerifactuSubmitInput = {
  *  - `aeat_rejected` → AEAT parsed the request but rejected the record
  */
 export type VerifactuErrorCode =
-	| "cert_missing"
-	| "cert_invalid"
-	| "xml_invalid"
-	| "network_error"
-	| "http_error"
-	| "aeat_rejected";
+  | "cert_missing"
+  | "cert_invalid"
+  | "xml_invalid"
+  | "network_error"
+  | "http_error"
+  | "aeat_rejected";
 
 export type VerifactuSubmitResult = {
-	status: "accepted" | "rejected" | "error";
-	csv: string | null;
-	hash: string;
-	idfact: string;
-	response: Record<string, unknown>;
-	errorMessage: string | null;
-	/** Typed error category for programmatic handling; `null` when accepted. */
-	errorCode: VerifactuErrorCode | null;
-	/** Raw AEAT `CodigoErrorRegistro` when the registry rejected the record. */
-	aeatCode: string | null;
+  status: "accepted" | "rejected" | "error";
+  csv: string | null;
+  hash: string;
+  idfact: string;
+  response: Record<string, unknown>;
+  errorMessage: string | null;
+  /** Typed error category for programmatic handling; `null` when accepted. */
+  errorCode: VerifactuErrorCode | null;
+  /** Raw AEAT `CodigoErrorRegistro` when the registry rejected the record. */
+  aeatCode: string | null;
 };
 
 function esc(s: string): string {
-	return s
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function ddmmyyyy(d: Date): string {
-	const dd = String(d.getUTCDate()).padStart(2, "0");
-	const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-	return `${dd}-${mm}-${d.getUTCFullYear()}`;
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${dd}-${mm}-${d.getUTCFullYear()}`;
 }
 
 /**
@@ -85,160 +85,180 @@ function ddmmyyyy(d: Date): string {
  * XAdES is only required in offline (non-verifactu) mode.
  */
 export function buildVerifactuXml(
-	input: VerifactuSubmitInput,
-	hash: string,
-	software: VerifactuSoftware,
+  input: VerifactuSubmitInput,
+  hash: string,
+  software: VerifactuSoftware,
 ): string {
-	const SUM_LR =
-		"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd";
-	const SUM =
-		"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd";
+  const SUM_LR =
+    "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd";
+  const SUM =
+    "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd";
 
-	// Encadenamiento: first invoice → PrimerRegistro; subsequent → full previous ID
-	const encadenamiento =
-		input.previousHash && input.previousInvoiceNumber && input.previousIssueDate
-			? [
-					"      <sf:Encadenamiento>",
-					"        <sf:RegistroAnterior>",
-					`          <sf:IDEmisorFacturaAnterior>${esc(input.nif)}</sf:IDEmisorFacturaAnterior>`,
-					`          <sf:NumSerieFacturaAnterior>${esc(input.previousInvoiceNumber)}</sf:NumSerieFacturaAnterior>`,
-					`          <sf:FechaExpedicionFacturaAnterior>${ddmmyyyy(input.previousIssueDate)}</sf:FechaExpedicionFacturaAnterior>`,
-					`          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
-					"        </sf:RegistroAnterior>",
-					"      </sf:Encadenamiento>",
-				].join("\n")
-			: "      <sf:Encadenamiento><sf:PrimerRegistro>S</sf:PrimerRegistro></sf:Encadenamiento>";
+  // Encadenamiento: first invoice → PrimerRegistro; subsequent → full previous ID.
+  // RegistroAnterior is an EncadenamientoFacturaAnteriorType: its children are
+  // IDEmisorFactura / NumSerieFactura / FechaExpedicionFactura (no "Anterior"
+  // suffix) per SuministroInformacion.xsd.
+  const encadenamiento =
+    input.previousHash && input.previousInvoiceNumber && input.previousIssueDate
+      ? [
+        "      <sf:Encadenamiento>",
+        "        <sf:RegistroAnterior>",
+        `          <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
+        `          <sf:NumSerieFactura>${esc(input.previousInvoiceNumber)}</sf:NumSerieFactura>`,
+        `          <sf:FechaExpedicionFactura>${ddmmyyyy(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
+        `          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
+        "        </sf:RegistroAnterior>",
+        "      </sf:Encadenamiento>",
+      ].join("\n")
+      : "      <sf:Encadenamiento><sf:PrimerRegistro>S</sf:PrimerRegistro></sf:Encadenamiento>";
 
-	// Destinatarios: required for F1 (full invoice) when client NIF is known
-	const destinatarios =
-		input.invoiceType === "F1" && input.clientNif
-			? [
-					"      <sf:Destinatarios>",
-					"        <sf:IDDestinatario>",
-					`          <sf:NombreRazon>${esc(input.clientName ?? "")}</sf:NombreRazon>`,
-					`          <sf:NIF>${esc(input.clientNif)}</sf:NIF>`,
-					"        </sf:IDDestinatario>",
-					"      </sf:Destinatarios>",
-				].join("\n")
-			: null;
+  // Destinatarios: required for F1 (full invoice) when client NIF is known
+  const destinatarios =
+    input.invoiceType === "F1" && input.clientNif
+      ? [
+        "      <sf:Destinatarios>",
+        "        <sf:IDDestinatario>",
+        `          <sf:NombreRazon>${esc(input.clientName ?? "")}</sf:NombreRazon>`,
+        `          <sf:NIF>${esc(input.clientNif)}</sf:NIF>`,
+        "        </sf:IDDestinatario>",
+        "      </sf:Destinatarios>",
+      ].join("\n")
+      : null;
 
-	// Desglose: one DetalleDesglose per distinct VAT rate
-	const desgloseLines = input.vatLines
-		.map((l) =>
-			[
-				"        <sf:DetalleDesglose>",
-				"          <sf:ClaveRegimen>01</sf:ClaveRegimen>",
-				"          <sf:CalificacionOperacion>S1</sf:CalificacionOperacion>",
-				`          <sf:TipoImpositivo>${l.rate.toFixed(2)}</sf:TipoImpositivo>`,
-				`          <sf:BaseImponibleOimporteNoSujeto>${l.base.toFixed(2)}</sf:BaseImponibleOimporteNoSujeto>`,
-				`          <sf:CuotaRepercutida>${l.tax.toFixed(2)}</sf:CuotaRepercutida>`,
-				"        </sf:DetalleDesglose>",
-			].join("\n"),
-		)
-		.join("\n");
+  // Desglose: one DetalleDesglose per distinct VAT rate
+  const desgloseLines = input.vatLines
+    .map((l) =>
+      [
+        "        <sf:DetalleDesglose>",
+        "          <sf:ClaveRegimen>01</sf:ClaveRegimen>",
+        "          <sf:CalificacionOperacion>S1</sf:CalificacionOperacion>",
+        `          <sf:TipoImpositivo>${l.rate.toFixed(2)}</sf:TipoImpositivo>`,
+        `          <sf:BaseImponibleOimporteNoSujeto>${l.base.toFixed(2)}</sf:BaseImponibleOimporteNoSujeto>`,
+        `          <sf:CuotaRepercutida>${l.tax.toFixed(2)}</sf:CuotaRepercutida>`,
+        "        </sf:DetalleDesglose>",
+      ].join("\n"),
+    )
+    .join("\n");
 
-	return [
-		`<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="${SUM_LR}" xmlns:sf="${SUM}">`,
-		"  <sfLR:Cabecera>",
-		"    <sf:ObligadoEmision>",
-		`      <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
-		`      <sf:NIF>${esc(input.nif)}</sf:NIF>`,
-		"    </sf:ObligadoEmision>",
-		"  </sfLR:Cabecera>",
-		"  <sfLR:RegistroFactura>",
-		"    <sf:RegistroAlta>",
-		"      <sf:IDVersion>1.0</sf:IDVersion>",
-		"      <sf:IDFactura>",
-		`        <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
-		`        <sf:NumSerieFactura>${esc(input.invoiceNumber)}</sf:NumSerieFactura>`,
-		`        <sf:FechaExpedicionFactura>${ddmmyyyy(input.issueDate)}</sf:FechaExpedicionFactura>`,
-		"      </sf:IDFactura>",
-		`      <sf:NombreRazonEmisor>${esc(input.emisorName)}</sf:NombreRazonEmisor>`,
-		`      <sf:TipoFactura>${esc(input.invoiceType)}</sf:TipoFactura>`,
-		`      <sf:DescripcionOperacion>${esc(input.descriptionOperacion.slice(0, 250))}</sf:DescripcionOperacion>`,
-		destinatarios,
-		"      <sf:Desglose>",
-		desgloseLines,
-		"      </sf:Desglose>",
-		`      <sf:CuotaTotal>${input.taxAmount.toFixed(2)}</sf:CuotaTotal>`,
-		`      <sf:ImporteTotal>${input.total.toFixed(2)}</sf:ImporteTotal>`,
-		encadenamiento,
-		"      <sf:SistemaInformatico>",
-		`        <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
-		`        <sf:NIF>${esc(input.nif)}</sf:NIF>`,
-		`        <sf:NombreSistemaInformatico>${esc(software.name)}</sf:NombreSistemaInformatico>`,
-		`        <sf:IdSistemaInformatico>${esc(software.id)}</sf:IdSistemaInformatico>`,
-		`        <sf:Version>${esc(software.version)}</sf:Version>`,
-		`        <sf:NumeroInstalacion>${esc(software.installationNumber)}</sf:NumeroInstalacion>`,
-		"        <sf:TipoUsoPosibleSoloVerifactu>S</sf:TipoUsoPosibleSoloVerifactu>",
-		"        <sf:TipoUsoPosibleMultiOT>N</sf:TipoUsoPosibleMultiOT>",
-		"        <sf:IndicadorMultiplesOT>N</sf:IndicadorMultiplesOT>",
-		"      </sf:SistemaInformatico>",
-		`      <sf:FechaHoraHusoGenRegistro>${spanishTimestamp(input.generatedAt)}</sf:FechaHoraHusoGenRegistro>`,
-		"      <sf:TipoHuella>01</sf:TipoHuella>",
-		`      <sf:Huella>${esc(hash)}</sf:Huella>`,
-		"    </sf:RegistroAlta>",
-		"  </sfLR:RegistroFactura>",
-		"</sfLR:RegFactuSistemaFacturacion>",
-	]
-		.filter((l) => l !== null)
-		.join("\n");
+  return [
+    `<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="${SUM_LR}" xmlns:sf="${SUM}">`,
+    "  <sfLR:Cabecera>",
+    "    <sf:ObligadoEmision>",
+    `      <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
+    `      <sf:NIF>${esc(input.nif)}</sf:NIF>`,
+    "    </sf:ObligadoEmision>",
+    "  </sfLR:Cabecera>",
+    "  <sfLR:RegistroFactura>",
+    "    <sf:RegistroAlta>",
+    "      <sf:IDVersion>1.0</sf:IDVersion>",
+    "      <sf:IDFactura>",
+    `        <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
+    `        <sf:NumSerieFactura>${esc(input.invoiceNumber)}</sf:NumSerieFactura>`,
+    `        <sf:FechaExpedicionFactura>${ddmmyyyy(input.issueDate)}</sf:FechaExpedicionFactura>`,
+    "      </sf:IDFactura>",
+    `      <sf:NombreRazonEmisor>${esc(input.emisorName)}</sf:NombreRazonEmisor>`,
+    `      <sf:TipoFactura>${esc(input.invoiceType)}</sf:TipoFactura>`,
+    `      <sf:DescripcionOperacion>${esc(input.descriptionOperacion.slice(0, 250))}</sf:DescripcionOperacion>`,
+    destinatarios,
+    "      <sf:Desglose>",
+    desgloseLines,
+    "      </sf:Desglose>",
+    `      <sf:CuotaTotal>${input.taxAmount.toFixed(2)}</sf:CuotaTotal>`,
+    `      <sf:ImporteTotal>${input.total.toFixed(2)}</sf:ImporteTotal>`,
+    encadenamiento,
+    "      <sf:SistemaInformatico>",
+    `        <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
+    `        <sf:NIF>${esc(input.nif)}</sf:NIF>`,
+    `        <sf:NombreSistemaInformatico>${esc(software.name)}</sf:NombreSistemaInformatico>`,
+    `        <sf:IdSistemaInformatico>${esc(software.id)}</sf:IdSistemaInformatico>`,
+    `        <sf:Version>${esc(software.version)}</sf:Version>`,
+    `        <sf:NumeroInstalacion>${esc(software.installationNumber)}</sf:NumeroInstalacion>`,
+    "        <sf:TipoUsoPosibleSoloVerifactu>S</sf:TipoUsoPosibleSoloVerifactu>",
+    "        <sf:TipoUsoPosibleMultiOT>N</sf:TipoUsoPosibleMultiOT>",
+    "        <sf:IndicadorMultiplesOT>N</sf:IndicadorMultiplesOT>",
+    "      </sf:SistemaInformatico>",
+    `      <sf:FechaHoraHusoGenRegistro>${spanishTimestamp(input.generatedAt)}</sf:FechaHoraHusoGenRegistro>`,
+    "      <sf:TipoHuella>01</sf:TipoHuella>",
+    `      <sf:Huella>${esc(hash)}</sf:Huella>`,
+    "    </sf:RegistroAlta>",
+    "  </sfLR:RegistroFactura>",
+    "</sfLR:RegFactuSistemaFacturacion>",
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
 }
 
 /** Wrap the (signed) registration document in a SOAP 1.1 envelope. */
 function buildSoapEnvelope(innerXml: string): string {
-	return `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Header/><soapenv:Body>${innerXml}</soapenv:Body></soapenv:Envelope>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Header/><soapenv:Body>${innerXml}</soapenv:Body></soapenv:Envelope>`;
 }
 
 /** Parse the AEAT SOAP response and extract CSV, status and any registry error. */
 function parseSoapResponse(body: string): {
-	csv: string | null;
-	status: "accepted" | "rejected";
-	aeatCode: string | null;
-	aeatDescription: string | null;
-	soapFault: string | null;
+  csv: string | null;
+  status: "accepted" | "rejected";
+  aeatCode: string | null;
+  aeatDescription: string | null;
+  soapFault: string | null;
 } {
-	const parser = new XMLParser({
-		ignoreAttributes: false,
-		removeNSPrefix: true,
-	});
-	const obj = parser.parse(body) as Record<string, unknown>;
-	// Traverse: Envelope > Body > RespuestaRegFactuSistemaFacturacion
-	const envelope = obj.Envelope as Record<string, unknown> | undefined;
-	const soapBody = envelope?.Body as Record<string, unknown> | undefined;
-	const resp = soapBody?.RespuestaRegFactuSistemaFacturacion as
-		| Record<string, unknown>
-		| undefined;
-	const fault = soapBody?.Fault as Record<string, unknown> | undefined;
-	const soapFault = fault?.faultstring ? String(fault.faultstring) : null;
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    removeNSPrefix: true,
+  });
+  let obj: Record<string, unknown>;
+  try {
+    obj = parser.parse(body) as Record<string, unknown>;
+  } catch {
+    obj = {};
+  }
+  // Traverse: Envelope > Body > RespuestaRegFactuSistemaFacturacion
+  const envelope = obj.Envelope as Record<string, unknown> | undefined;
+  const soapBody = envelope?.Body as Record<string, unknown> | undefined;
+  const resp = soapBody?.RespuestaRegFactuSistemaFacturacion as
+    | Record<string, unknown>
+    | undefined;
+  const fault = soapBody?.Fault as Record<string, unknown> | undefined;
+  const soapFault = fault?.faultstring ? String(fault.faultstring) : null;
 
-	const estadoEnvio = String(resp?.EstadoEnvio ?? "");
-	const csv = resp?.CSV ? String(resp.CSV) : null;
-	const status = estadoEnvio.toLowerCase().includes("correcto")
-		? "accepted"
-		: "rejected";
+  const estadoEnvio = String(resp?.EstadoEnvio ?? "")
+    .trim()
+    .toLowerCase();
+  const csv = resp?.CSV ? String(resp.CSV) : null;
 
-	// Per-record registry errors: AEAT returns one RespuestaLinea per record,
-	// which fast-xml-parser yields as a single object or an array. Surface the
-	// first CodigoErrorRegistro/DescripcionErrorRegistro found.
-	const lineas = resp?.RespuestaLinea;
-	const firstLinea = (Array.isArray(lineas) ? lineas[0] : lineas) as
-		| Record<string, unknown>
-		| undefined;
-	const aeatCode =
-		firstLinea?.CodigoErrorRegistro != null
-			? String(firstLinea.CodigoErrorRegistro)
-			: null;
-	const aeatDescription =
-		firstLinea?.DescripcionErrorRegistro != null
-			? String(firstLinea.DescripcionErrorRegistro)
-			: null;
+  // Per-record registry state/errors: AEAT returns one RespuestaLinea per
+  // record, which fast-xml-parser yields as a single object or an array.
+  const lineas = resp?.RespuestaLinea;
+  const firstLinea = (Array.isArray(lineas) ? lineas[0] : lineas) as
+    | Record<string, unknown>
+    | undefined;
+  const estadoRegistro = String(firstLinea?.EstadoRegistro ?? "")
+    .trim()
+    .toLowerCase();
+  const aeatCode =
+    firstLinea?.CodigoErrorRegistro != null
+      ? String(firstLinea.CodigoErrorRegistro)
+      : null;
+  const aeatDescription =
+    firstLinea?.DescripcionErrorRegistro != null
+      ? String(firstLinea.DescripcionErrorRegistro)
+      : null;
 
-	return { csv, status, aeatCode, aeatDescription, soapFault };
+  // The per-record EstadoRegistro is authoritative: "AceptadoConErrores" means
+  // AEAT did register the record. Exact comparisons are required because
+  // "Incorrecto" and "ParcialmenteCorrecto" both contain "correcto".
+  const status = estadoRegistro
+    ? estadoRegistro === "correcto" || estadoRegistro === "aceptadoconerrores"
+      ? "accepted"
+      : "rejected"
+    : estadoEnvio === "correcto"
+      ? "accepted"
+      : "rejected";
+
+  return { csv, status, aeatCode, aeatDescription, soapFault };
 }
 
 function mockCsv(hash: string): string {
-	return hash.slice(0, 16).toUpperCase();
+  return hash.slice(0, 16).toUpperCase();
 }
 
 /**
@@ -246,45 +266,45 @@ function mockCsv(hash: string): string {
  * TLS handshake, which is required by all AEAT VERI*FACTU web services.
  */
 async function soapPost(
-	endpoint: string,
-	body: string,
-	soapAction: string,
-	pfxBuf: Buffer,
-	passphrase: string,
+  endpoint: string,
+  body: string,
+  soapAction: string,
+  pfxBuf: Buffer,
+  passphrase: string,
 ): Promise<{ status: number; text: string }> {
-	return new Promise((resolve, reject) => {
-		const u = new URL(endpoint);
-		const bodyBuf = Buffer.from(body, "utf8");
-		const req = https.request(
-			{
-				hostname: u.hostname,
-				port: u.port ? Number(u.port) : 443,
-				path: u.pathname + u.search,
-				method: "POST",
-				headers: {
-					"Content-Type": "text/xml; charset=utf-8",
-					"Content-Length": bodyBuf.length,
-					SOAPAction: soapAction,
-				},
-				pfx: pfxBuf,
-				passphrase,
-				rejectUnauthorized: true,
-			},
-			(res) => {
-				const chunks: Buffer[] = [];
-				res.on("data", (c: Buffer) => chunks.push(c));
-				res.on("end", () =>
-					resolve({
-						status: res.statusCode ?? 0,
-						text: Buffer.concat(chunks).toString("utf8"),
-					}),
-				);
-			},
-		);
-		req.on("error", reject);
-		req.write(bodyBuf);
-		req.end();
-	});
+  return new Promise((resolve, reject) => {
+    const u = new URL(endpoint);
+    const bodyBuf = Buffer.from(body, "utf8");
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        port: u.port ? Number(u.port) : 443,
+        path: u.pathname + u.search,
+        method: "POST",
+        headers: {
+          "Content-Type": "text/xml; charset=utf-8",
+          "Content-Length": bodyBuf.length,
+          SOAPAction: soapAction,
+        },
+        pfx: pfxBuf,
+        passphrase,
+        rejectUnauthorized: true,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString("utf8"),
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.write(bodyBuf);
+    req.end();
+  });
 }
 
 /**
@@ -297,178 +317,186 @@ async function soapPost(
  * integrity. Switching test↔prod is a one-variable change (VERIFACTU_ENV).
  */
 export async function submitToVerifactu(
-	input: VerifactuSubmitInput,
-	config: VerifactuConfig,
-	logger: VerifactuLogger = noopLogger,
+  input: VerifactuSubmitInput,
+  config: VerifactuConfig,
+  logger: VerifactuLogger = noopLogger,
 ): Promise<VerifactuSubmitResult> {
-	const hash = computeInvoiceHash(input);
-	const idfact = buildIdfact(input.nif, input.invoiceNumber, input.issueDate);
-	const xml = buildVerifactuXml(input, hash, config.software);
+  const hash = computeInvoiceHash(input);
+  const idfact = buildIdfact(input.nif, input.invoiceNumber, input.issueDate);
+  const xml = buildVerifactuXml(input, hash, config.software);
 
-	logger.info(
-		{
-			mode: config.environment,
-			invoice: input.invoiceNumber,
-			hash,
-			idfact,
-			xmlBytes: xml.length,
-		},
-		"verifactu_submit_start",
-	);
+  logger.info(
+    {
+      mode: config.environment,
+      invoice: input.invoiceNumber,
+      hash,
+      idfact,
+      xmlBytes: xml.length,
+    },
+    "verifactu_submit_start",
+  );
 
-	// ── Well-formedness gate ──────────────────────────────────────────────────
-	// Never ship a malformed payload (even in mock/CI): catches builder breakage.
-	const validation = validateVerifactuXml(xml);
-	if (!validation.valid) {
-		logger.error(
-			{
-				invoice: input.invoiceNumber,
-				reason: validation.message,
-				line: validation.line,
-			},
-			"verifactu_xml_invalid",
-		);
-		return {
-			status: "error",
-			csv: null,
-			hash,
-			idfact,
-			response: { error: "malformed XML", detail: validation.message },
-			errorMessage: `XML mal formado: ${validation.message}`,
-			errorCode: "xml_invalid",
-			aeatCode: null,
-		};
-	}
+  // ── Well-formedness gate ──────────────────────────────────────────────────
+  // Never ship a malformed payload (even in mock/CI): catches builder breakage.
+  const validation = validateVerifactuXml(xml);
+  if (!validation.valid) {
+    logger.error(
+      {
+        invoice: input.invoiceNumber,
+        reason: validation.message,
+        line: validation.line,
+      },
+      "verifactu_xml_invalid",
+    );
+    return {
+      status: "error",
+      csv: null,
+      hash,
+      idfact,
+      response: { error: "malformed XML", detail: validation.message },
+      errorMessage: `XML mal formado: ${validation.message}`,
+      errorCode: "xml_invalid",
+      aeatCode: null,
+    };
+  }
 
-	// ── Mock mode ────────────────────────────────────────────────────────────
-	if (config.environment === "mock") {
-		const csv = mockCsv(hash);
-		logger.info(
-			{ invoice: input.invoiceNumber, csv },
-			"verifactu_submit_mock_ok",
-		);
-		return {
-			status: "accepted",
-			csv,
-			hash,
-			idfact,
-			response: { mock: true, csv, acceptedAt: new Date().toISOString() },
-			errorMessage: null,
-			errorCode: null,
-			aeatCode: null,
-		};
-	}
+  // ── Mock mode ────────────────────────────────────────────────────────────
+  if (config.environment === "mock") {
+    const csv = mockCsv(hash);
+    logger.info(
+      { invoice: input.invoiceNumber, csv },
+      "verifactu_submit_mock_ok",
+    );
+    return {
+      status: "accepted",
+      csv,
+      hash,
+      idfact,
+      response: { mock: true, csv, acceptedAt: new Date().toISOString() },
+      errorMessage: null,
+      errorCode: null,
+      aeatCode: null,
+    };
+  }
 
-	// ── Real SOAP submission (test / prod) ────────────────────────────────────
-	if (!config.certificate.p12Base64 || !config.certificate.password) {
-		logger.error({ mode: config.environment }, "verifactu_cert_missing");
-		return {
-			status: "error",
-			csv: null,
-			hash,
-			idfact,
-			response: { kind: "certificate_missing" },
-			errorMessage:
-				"Certificado P12 no configurado (VERIFACTU_CERT_P12_BASE64 / VERIFACTU_CERT_PASSWORD)",
-			errorCode: "cert_missing",
-			aeatCode: null,
-		};
-	}
+  // ── Real SOAP submission (test / prod) ────────────────────────────────────
+  if (!config.certificate.p12Base64 || !config.certificate.password) {
+    logger.error({ mode: config.environment }, "verifactu_cert_missing");
+    return {
+      status: "error",
+      csv: null,
+      hash,
+      idfact,
+      response: { kind: "certificate_missing" },
+      errorMessage:
+        "Certificado P12 no configurado (VERIFACTU_CERT_P12_BASE64 / VERIFACTU_CERT_PASSWORD)",
+      errorCode: "cert_missing",
+      aeatCode: null,
+    };
+  }
 
-	// Validate cert + password before making any network call
-	try {
-		loadP12Cert(config.certificate.p12Base64, config.certificate.password);
-	} catch (err) {
-		logger.error({ err }, "verifactu_cert_load_error");
-		return {
-			status: "error",
-			csv: null,
-			hash,
-			idfact,
-			response: { kind: "certificate_error" },
-			errorMessage: `Error cargando certificado: ${String(err)}`,
-			errorCode: "cert_invalid",
-			aeatCode: null,
-		};
-	}
+  // Validate cert + password before making any network call
+  try {
+    loadP12Cert(config.certificate.p12Base64, config.certificate.password);
+  } catch (err) {
+    logger.error({ err }, "verifactu_cert_load_error");
+    return {
+      status: "error",
+      csv: null,
+      hash,
+      idfact,
+      response: { kind: "certificate_error" },
+      errorMessage: `Error cargando certificado: ${String(err)}`,
+      errorCode: "cert_invalid",
+      aeatCode: null,
+    };
+  }
 
-	// Use the same strict decoder as the preflight check. Buffer.from(...)
-	// silently discards invalid Base64 characters, which can turn a damaged
-	// environment variable into a different/truncated certificate at TLS time.
-	const pfxBuf = decodeP12Base64(config.certificate.p12Base64);
-	const soapBody = buildSoapEnvelope(xml);
-	const endpoint = AEAT_SOAP_ENDPOINT[config.environment];
+  // Use the same strict decoder as the preflight check. Buffer.from(...)
+  // silently discards invalid Base64 characters, which can turn a damaged
+  // environment variable into a different/truncated certificate at TLS time.
+  const pfxBuf = decodeP12Base64(config.certificate.p12Base64);
+  const soapBody = buildSoapEnvelope(xml);
+  const endpoint = AEAT_SOAP_ENDPOINT[config.environment];
 
-	let rawResponse: string;
-	let httpStatus: number;
-	try {
-		const res = await soapPost(
-			endpoint,
-			soapBody,
-			AEAT_SOAP_ACTION_ALTA,
-			pfxBuf,
-			config.certificate.password,
-		);
-		rawResponse = res.text;
-		httpStatus = res.status;
-	} catch (err) {
-		logger.error({ err, endpoint }, "verifactu_network_error");
-		const detail = String(err);
-		const certificateHint = /asn(?:\.1|1)|pfx|pkcs.?12|certificate|certificado|tls|openssl/i.test(
-			detail,
-		)
-			? " (revisar VERIFACTU_CERT_P12_BASE64, contraseña y certificado cliente)"
-			: "";
-		return {
-			status: "error",
-			csv: null,
-			hash,
-			idfact,
-			response: { kind: "network_error" },
-			errorMessage: `Error de conexión${certificateHint}: ${detail}`,
-			errorCode: "network_error",
-			aeatCode: null,
-		};
-	}
+  let rawResponse: string;
+  let httpStatus: number;
+  try {
+    const res = await soapPost(
+      endpoint,
+      soapBody,
+      AEAT_SOAP_ACTION_ALTA,
+      pfxBuf,
+      config.certificate.password,
+    );
+    rawResponse = res.text;
+    httpStatus = res.status;
+  } catch (err) {
+    logger.error({ err, endpoint }, "verifactu_network_error");
+    const detail = String(err);
+    const certificateHint = /asn(?:\.1|1)|pfx|pkcs.?12|certificate|certificado|tls|openssl/i.test(
+      detail,
+    )
+      ? " (revisar VERIFACTU_CERT_P12_BASE64, contraseña y certificado cliente)"
+      : "";
+    return {
+      status: "error",
+      csv: null,
+      hash,
+      idfact,
+      response: { kind: "network_error" },
+      errorMessage: `Error de conexión${certificateHint}: ${detail}`,
+      errorCode: "network_error",
+      aeatCode: null,
+    };
+  }
 
-	if (httpStatus >= 400) {
-		logger.warn({ status: httpStatus, endpoint }, "verifactu_http_error");
-		return {
-			status: "error",
-			csv: null,
-			hash,
-			idfact,
-			response: { kind: "http_error", httpStatus },
-			errorMessage: `AEAT HTTP ${httpStatus}`,
-			errorCode: "http_error",
-			aeatCode: null,
-		};
-	}
+  if (httpStatus >= 400) {
+    // AEAT returns schema/validation errors as a SOAP Fault with HTTP 500;
+    // the faultstring carries the actionable message (e.g. code 4102).
+    const { soapFault } = parseSoapResponse(rawResponse);
+    logger.warn(
+      { status: httpStatus, endpoint, soapFault },
+      "verifactu_http_error",
+    );
+    return {
+      status: "error",
+      csv: null,
+      hash,
+      idfact,
+      response: { kind: "http_error", httpStatus, soapFault },
+      errorMessage: soapFault
+        ? `AEAT HTTP ${httpStatus}: ${soapFault}`
+        : `AEAT HTTP ${httpStatus}`,
+      errorCode: "http_error",
+      aeatCode: null,
+    };
+  }
 
-	const { csv, status, aeatCode, aeatDescription, soapFault } =
-		parseSoapResponse(rawResponse);
-	logger.info(
-		{ invoice: input.invoiceNumber, csv, status, aeatCode },
-		"verifactu_submit_ok",
-	);
-	return {
-		status,
-		csv,
-		hash,
-		idfact,
-		response: {
-			kind: "aeat_response",
-			httpStatus,
-			csv,
-			aeatCode,
-			aeatDescription,
-			soapFault,
-		},
-		errorMessage:
-			status === "rejected"
-				? (aeatDescription ?? soapFault ?? "AEAT rechazó el registro")
-				: null,
-		errorCode: status === "rejected" ? "aeat_rejected" : null,
-		aeatCode: status === "rejected" ? aeatCode : null,
-	};
+  const { csv, status, aeatCode, aeatDescription, soapFault } =
+    parseSoapResponse(rawResponse);
+  logger.info(
+    { invoice: input.invoiceNumber, csv, status, aeatCode },
+    "verifactu_submit_ok",
+  );
+  return {
+    status,
+    csv,
+    hash,
+    idfact,
+    response: {
+      kind: "aeat_response",
+      httpStatus,
+      csv,
+      aeatCode,
+      aeatDescription,
+      soapFault,
+    },
+    errorMessage:
+      status === "rejected"
+        ? (aeatDescription ?? soapFault ?? "AEAT rechazó el registro")
+        : null,
+    errorCode: status === "rejected" ? "aeat_rejected" : null,
+    aeatCode: status === "rejected" ? aeatCode : null,
+  };
 }
