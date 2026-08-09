@@ -70,4 +70,4 @@ jobs:
           fi
 
       - name: Publish
-        run: pnpm publish --provenance --access public
+        run: npm publish --provenance --access public
