@@ -13,6 +13,8 @@
  * `@doscientos/verifactu`.
  */
 import {
+  cancelInVerifactu,
+  type VerifactuCancellationInput,
   type VerifactuSubmitInput,
   type VerifactuSubmitResult,
   submitToVerifactu,
@@ -33,6 +35,13 @@ export type VerifactuClient = {
    * failures are returned as a typed {@link VerifactuSubmitResult}.
    */
   registerInvoice(input: VerifactuSubmitInput): Promise<VerifactuSubmitResult>;
+  /**
+   * Register (`RegistroAnulacion`) the cancellation of a previously generated
+   * billing record. Never deletes or overwrites the original RegistroAlta.
+   */
+  cancelInvoice(
+    input: VerifactuCancellationInput,
+  ): Promise<VerifactuSubmitResult>;
   /** Build the tributary QR URL (AEAT cotejo endpoint, or the mock verify route). */
   buildQrUrl(params: QrParams): string;
   /** Convenience: build the QR URL and encode it as a PNG data URL in one step. */
@@ -49,6 +58,7 @@ export function createVerifactuClient(
 ): VerifactuClient {
   return {
     registerInvoice: (input) => submitToVerifactu(input, config, logger),
+    cancelInvoice: (input) => cancelInVerifactu(input, config, logger),
     buildQrUrl: (params) => buildQrUrl(params, config),
     buildQrDataUrl: (params) => buildQrDataUrl(buildQrUrl(params, config)),
   };

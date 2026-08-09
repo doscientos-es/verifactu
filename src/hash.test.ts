@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildHashPayload, computeInvoiceHash } from "./hash";
+import {
+  buildCancellationHashPayload,
+  buildHashPayload,
+  computeCancellationHash,
+  computeInvoiceHash,
+} from "./hash";
 import { buildIdfact } from "./idfact";
 
 const baseInput = {
@@ -61,6 +66,20 @@ describe("verifactu hash", () => {
     const payload = buildHashPayload({ ...baseInput, taxAmount: 21, total: 121 });
     expect(payload).toContain("CuotaTotal=21.00");
     expect(payload).toContain("ImporteTotal=121.00");
+  });
+
+  it("uses the RegistroAnulacion field names and order", () => {
+    const input = {
+      nif: "89890001K",
+      cancelledInvoiceNumber: "12345678/G33",
+      cancelledInvoiceIssueDate: new Date(Date.UTC(2024, 0, 1)),
+      previousHash: "PREVIOUSHASH",
+      generatedAt: new Date("2024-01-01T19:20:30+01:00"),
+    };
+    expect(buildCancellationHashPayload(input)).toBe(
+      "IDEmisorFacturaAnulada=89890001K&NumSerieFacturaAnulada=12345678/G33&FechaExpedicionFacturaAnulada=01-01-2024&Huella=PREVIOUSHASH&FechaHoraHusoGenRegistro=2024-01-01T19:20:30+01:00",
+    );
+    expect(computeCancellationHash(input)).toMatch(/^[A-F0-9]{64}$/);
   });
 });
 

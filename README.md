@@ -1,7 +1,8 @@
 # @doscientos/verifactu
 
-Framework-agnostic **Verifactu (AEAT)** toolkit for Node.js: invoice registration
-(`RegistroAlta`), the SIF SHA-256 hash chain, and tributary QR generation.
+Framework-agnostic **Verifactu (AEAT)** toolkit for Node.js: billing-record
+registration (`RegistroAlta` and `RegistroAnulacion`), the SIF SHA-256 hash
+chain, and tributary QR generation.
 
 - **Server-only.** Uses `node:crypto`, mutual-TLS and `node-forge`. Run it from
   Next.js Server Actions / Route Handlers, a Node server, or a worker — **never
@@ -96,8 +97,9 @@ type VerifactuConfig = {
 
 | Export | Description |
 | --- | --- |
-| `createVerifactuClient(config, logger?)` | Recommended facade → `registerInvoice`, `buildQrUrl`, `buildQrDataUrl`. |
+| `createVerifactuClient(config, logger?)` | Recommended facade → `registerInvoice`, `cancelInvoice`, QR helpers. |
 | `submitToVerifactu(input, config, logger?)` | Free function behind `registerInvoice`. |
+| `cancelInVerifactu(input, config, logger?)` | Free function behind `cancelInvoice`; creates a `RegistroAnulacion`. |
 | `buildVerifactuXml(input, hash, software)` | Build the `RegistroAlta` XML payload. |
 | `buildQrUrl(params, config)` / `buildQrDataUrl(url)` | QR helpers. |
 | `validateVerifactuXml(xml)` | XML well-formedness check. |

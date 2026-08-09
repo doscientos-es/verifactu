@@ -1,7 +1,11 @@
 import { XMLParser } from "fast-xml-parser";
 import https from "node:https";
-import { AEAT_SOAP_ACTION_ALTA, AEAT_SOAP_ENDPOINT } from "./constants";
-import { computeInvoiceHash, spanishTimestamp } from "./hash";
+import { AEAT_SOAP_ACTION_REG_FACTU, AEAT_SOAP_ENDPOINT } from "./constants";
+import {
+  computeCancellationHash,
+  computeInvoiceHash,
+  spanishTimestamp,
+} from "./hash";
 import { buildIdfact } from "./idfact";
 import { type VerifactuLogger, noopLogger } from "./logger";
 import { decodeP12Base64, loadP12Cert } from "./sign";
@@ -27,6 +31,27 @@ export type VerifactuSubmitInput = {
   /** Required for Encadenamiento.RegistroAnterior (non-first invoices). */
   previousInvoiceNumber: string | null;
   previousIssueDate: Date | null;
+};
+
+/** Data needed to generate and submit a RegistroAnulacion. */
+export type VerifactuCancellationInput = {
+  /** NIF of the issuer and of the invoice being annulled. */
+  nif: string;
+  /** Series and number of the invoice identified by the annulment. */
+  cancelledInvoiceNumber: string;
+  /** Issue date of the invoice identified by the annulment. */
+  cancelledInvoiceIssueDate: Date;
+  /** Hash of the immediately preceding record in this SIF chain. */
+  previousHash: string | null;
+  generatedAt: Date;
+  emisorName: string;
+  /** Required with previousHash for Encadenamiento.RegistroAnterior. */
+  previousInvoiceNumber: string | null;
+  previousIssueDate: Date | null;
+  /** Whether the annulled registration is absent from AEAT (defaults to N). */
+  sinRegistroPrevio?: "S" | "N";
+  /** Whether AEAT previously rejected this annulment (defaults to N). */
+  rechazoPrevio?: "S" | "N";
 };
 
 /**
@@ -188,6 +213,69 @@ export function buildVerifactuXml(
     .join("\n");
 }
 
+/** Build a RegistroAnulacion payload per Anexo I/II, HAC/1177/2024. */
+export function buildVerifactuCancellationXml(
+  input: VerifactuCancellationInput,
+  hash: string,
+  software: VerifactuSoftware,
+): string {
+  const SUM_LR =
+    "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd";
+  const SUM =
+    "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd";
+  const encadenamiento =
+    input.previousHash && input.previousInvoiceNumber && input.previousIssueDate
+      ? [
+        "      <sf:Encadenamiento>",
+        "        <sf:RegistroAnterior>",
+        `          <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
+        `          <sf:NumSerieFactura>${esc(input.previousInvoiceNumber)}</sf:NumSerieFactura>`,
+        `          <sf:FechaExpedicionFactura>${ddmmyyyy(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
+        `          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
+        "        </sf:RegistroAnterior>",
+        "      </sf:Encadenamiento>",
+      ].join("\n")
+      : "      <sf:Encadenamiento><sf:PrimerRegistro>S</sf:PrimerRegistro></sf:Encadenamiento>";
+
+  return [
+    `<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="${SUM_LR}" xmlns:sf="${SUM}">`,
+    "  <sfLR:Cabecera>",
+    "    <sf:ObligadoEmision>",
+    `      <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
+    `      <sf:NIF>${esc(input.nif)}</sf:NIF>`,
+    "    </sf:ObligadoEmision>",
+    "  </sfLR:Cabecera>",
+    "  <sfLR:RegistroFactura>",
+    "    <sf:RegistroAnulacion>",
+    "      <sf:IDVersion>1.0</sf:IDVersion>",
+    "      <sf:IDFactura>",
+    `        <sf:IDEmisorFacturaAnulada>${esc(input.nif)}</sf:IDEmisorFacturaAnulada>`,
+    `        <sf:NumSerieFacturaAnulada>${esc(input.cancelledInvoiceNumber)}</sf:NumSerieFacturaAnulada>`,
+    `        <sf:FechaExpedicionFacturaAnulada>${ddmmyyyy(input.cancelledInvoiceIssueDate)}</sf:FechaExpedicionFacturaAnulada>`,
+    "      </sf:IDFactura>",
+    `      <sf:SinRegistroPrevio>${input.sinRegistroPrevio ?? "N"}</sf:SinRegistroPrevio>`,
+    `      <sf:RechazoPrevio>${input.rechazoPrevio ?? "N"}</sf:RechazoPrevio>`,
+    encadenamiento,
+    "      <sf:SistemaInformatico>",
+    `        <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
+    `        <sf:NIF>${esc(input.nif)}</sf:NIF>`,
+    `        <sf:NombreSistemaInformatico>${esc(software.name)}</sf:NombreSistemaInformatico>`,
+    `        <sf:IdSistemaInformatico>${esc(software.id)}</sf:IdSistemaInformatico>`,
+    `        <sf:Version>${esc(software.version)}</sf:Version>`,
+    `        <sf:NumeroInstalacion>${esc(software.installationNumber)}</sf:NumeroInstalacion>`,
+    "        <sf:TipoUsoPosibleSoloVerifactu>S</sf:TipoUsoPosibleSoloVerifactu>",
+    "        <sf:TipoUsoPosibleMultiOT>N</sf:TipoUsoPosibleMultiOT>",
+    "        <sf:IndicadorMultiplesOT>N</sf:IndicadorMultiplesOT>",
+    "      </sf:SistemaInformatico>",
+    `      <sf:FechaHoraHusoGenRegistro>${spanishTimestamp(input.generatedAt)}</sf:FechaHoraHusoGenRegistro>`,
+    "      <sf:TipoHuella>01</sf:TipoHuella>",
+    `      <sf:Huella>${esc(hash)}</sf:Huella>`,
+    "    </sf:RegistroAnulacion>",
+    "  </sfLR:RegistroFactura>",
+    "</sfLR:RegFactuSistemaFacturacion>",
+  ].join("\n");
+}
+
 /** Wrap the (signed) registration document in a SOAP 1.1 envelope. */
 function buildSoapEnvelope(innerXml: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Header/><soapenv:Body>${innerXml}</soapenv:Body></soapenv:Envelope>`;
@@ -307,8 +395,15 @@ async function soapPost(
   });
 }
 
+type SubmissionPayload = {
+  reference: string;
+  hash: string;
+  idfact: string;
+  xml: string;
+};
+
 /**
- * Sends an invoice record to Verifactu. Dispatches by `VERIFACTU_ENV`:
+ * Sends a prepared billing record to Verifactu. Dispatches by `VERIFACTU_ENV`:
  *  - `mock`  → no network call (hash + QR only; used for MVP and CI)
  *  - `test`  → AEAT pre-production SOAP endpoint (mTLS with P12 cert)
  *  - `prod`  → AEAT production SOAP endpoint (mTLS with P12 cert)
@@ -316,33 +411,29 @@ async function soapPost(
  * No XAdES signature is applied: VERI*FACTU uses mTLS + hash chain for
  * integrity. Switching test↔prod is a one-variable change (VERIFACTU_ENV).
  */
-export async function submitToVerifactu(
-  input: VerifactuSubmitInput,
+async function submitPayloadToVerifactu(
+  payload: SubmissionPayload,
   config: VerifactuConfig,
   logger: VerifactuLogger = noopLogger,
 ): Promise<VerifactuSubmitResult> {
-  const hash = computeInvoiceHash(input);
-  const idfact = buildIdfact(input.nif, input.invoiceNumber, input.issueDate);
-  const xml = buildVerifactuXml(input, hash, config.software);
-
   logger.info(
     {
       mode: config.environment,
-      invoice: input.invoiceNumber,
-      hash,
-      idfact,
-      xmlBytes: xml.length,
+      record: payload.reference,
+      hash: payload.hash,
+      idfact: payload.idfact,
+      xmlBytes: payload.xml.length,
     },
     "verifactu_submit_start",
   );
 
   // ── Well-formedness gate ──────────────────────────────────────────────────
   // Never ship a malformed payload (even in mock/CI): catches builder breakage.
-  const validation = validateVerifactuXml(xml);
+  const validation = validateVerifactuXml(payload.xml);
   if (!validation.valid) {
     logger.error(
       {
-        invoice: input.invoiceNumber,
+        record: payload.reference,
         reason: validation.message,
         line: validation.line,
       },
@@ -351,8 +442,8 @@ export async function submitToVerifactu(
     return {
       status: "error",
       csv: null,
-      hash,
-      idfact,
+      hash: payload.hash,
+      idfact: payload.idfact,
       response: { error: "malformed XML", detail: validation.message },
       errorMessage: `XML mal formado: ${validation.message}`,
       errorCode: "xml_invalid",
@@ -362,16 +453,16 @@ export async function submitToVerifactu(
 
   // ── Mock mode ────────────────────────────────────────────────────────────
   if (config.environment === "mock") {
-    const csv = mockCsv(hash);
+    const csv = mockCsv(payload.hash);
     logger.info(
-      { invoice: input.invoiceNumber, csv },
+      { record: payload.reference, csv },
       "verifactu_submit_mock_ok",
     );
     return {
       status: "accepted",
       csv,
-      hash,
-      idfact,
+      hash: payload.hash,
+      idfact: payload.idfact,
       response: { mock: true, csv, acceptedAt: new Date().toISOString() },
       errorMessage: null,
       errorCode: null,
@@ -385,8 +476,8 @@ export async function submitToVerifactu(
     return {
       status: "error",
       csv: null,
-      hash,
-      idfact,
+      hash: payload.hash,
+      idfact: payload.idfact,
       response: { kind: "certificate_missing" },
       errorMessage:
         "Certificado P12 no configurado (VERIFACTU_CERT_P12_BASE64 / VERIFACTU_CERT_PASSWORD)",
@@ -403,8 +494,8 @@ export async function submitToVerifactu(
     return {
       status: "error",
       csv: null,
-      hash,
-      idfact,
+      hash: payload.hash,
+      idfact: payload.idfact,
       response: { kind: "certificate_error" },
       errorMessage: `Error cargando certificado: ${String(err)}`,
       errorCode: "cert_invalid",
@@ -416,7 +507,7 @@ export async function submitToVerifactu(
   // silently discards invalid Base64 characters, which can turn a damaged
   // environment variable into a different/truncated certificate at TLS time.
   const pfxBuf = decodeP12Base64(config.certificate.p12Base64);
-  const soapBody = buildSoapEnvelope(xml);
+  const soapBody = buildSoapEnvelope(payload.xml);
   const endpoint = AEAT_SOAP_ENDPOINT[config.environment];
 
   let rawResponse: string;
@@ -425,7 +516,7 @@ export async function submitToVerifactu(
     const res = await soapPost(
       endpoint,
       soapBody,
-      AEAT_SOAP_ACTION_ALTA,
+      AEAT_SOAP_ACTION_REG_FACTU,
       pfxBuf,
       config.certificate.password,
     );
@@ -442,8 +533,8 @@ export async function submitToVerifactu(
     return {
       status: "error",
       csv: null,
-      hash,
-      idfact,
+      hash: payload.hash,
+      idfact: payload.idfact,
       response: { kind: "network_error" },
       errorMessage: `Error de conexión${certificateHint}: ${detail}`,
       errorCode: "network_error",
@@ -462,8 +553,8 @@ export async function submitToVerifactu(
     return {
       status: "error",
       csv: null,
-      hash,
-      idfact,
+      hash: payload.hash,
+      idfact: payload.idfact,
       response: { kind: "http_error", httpStatus, soapFault },
       errorMessage: soapFault
         ? `AEAT HTTP ${httpStatus}: ${soapFault}`
@@ -476,14 +567,14 @@ export async function submitToVerifactu(
   const { csv, status, aeatCode, aeatDescription, soapFault } =
     parseSoapResponse(rawResponse);
   logger.info(
-    { invoice: input.invoiceNumber, csv, status, aeatCode },
+    { record: payload.reference, csv, status, aeatCode },
     "verifactu_submit_ok",
   );
   return {
     status,
     csv,
-    hash,
-    idfact,
+    hash: payload.hash,
+    idfact: payload.idfact,
     response: {
       kind: "aeat_response",
       httpStatus,
@@ -499,4 +590,46 @@ export async function submitToVerifactu(
     errorCode: status === "rejected" ? "aeat_rejected" : null,
     aeatCode: status === "rejected" ? aeatCode : null,
   };
+}
+
+/** Submit a RegistroAlta invoice record to AEAT. Never throws. */
+export function submitToVerifactu(
+  input: VerifactuSubmitInput,
+  config: VerifactuConfig,
+  logger: VerifactuLogger = noopLogger,
+): Promise<VerifactuSubmitResult> {
+  const hash = computeInvoiceHash(input);
+  return submitPayloadToVerifactu(
+    {
+      reference: input.invoiceNumber,
+      hash,
+      idfact: buildIdfact(input.nif, input.invoiceNumber, input.issueDate),
+      xml: buildVerifactuXml(input, hash, config.software),
+    },
+    config,
+    logger,
+  );
+}
+
+/** Submit a RegistroAnulacion record to AEAT. Never throws. */
+export function cancelInVerifactu(
+  input: VerifactuCancellationInput,
+  config: VerifactuConfig,
+  logger: VerifactuLogger = noopLogger,
+): Promise<VerifactuSubmitResult> {
+  const hash = computeCancellationHash(input);
+  return submitPayloadToVerifactu(
+    {
+      reference: input.cancelledInvoiceNumber,
+      hash,
+      idfact: buildIdfact(
+        input.nif,
+        input.cancelledInvoiceNumber,
+        input.cancelledInvoiceIssueDate,
+      ),
+      xml: buildVerifactuCancellationXml(input, hash, config.software),
+    },
+    config,
+    logger,
+  );
 }

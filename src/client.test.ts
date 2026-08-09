@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildVerifactuXml, submitToVerifactu } from "./client";
+import {
+  buildVerifactuCancellationXml,
+  buildVerifactuXml,
+  cancelInVerifactu,
+  submitToVerifactu,
+} from "./client";
 import { createVerifactuClient } from "./index";
 import type { VerifactuConfig, VerifactuSoftware } from "./types";
 import { validateVerifactuXml } from "./validate";
@@ -158,6 +163,31 @@ describe("verifactu/client", () => {
     expect(xml).toContain("<sf:PrimerRegistro>S</sf:PrimerRegistro>");
   });
 
+  it("buildVerifactuCancellationXml identifies and chains an annulled invoice", () => {
+    const xml = buildVerifactuCancellationXml(
+      {
+        nif: "B12345678",
+        cancelledInvoiceNumber: "A-000001",
+        cancelledInvoiceIssueDate: new Date("2026-03-15T00:00:00.000Z"),
+        previousHash: "abc123",
+        generatedAt: new Date("2026-03-16T12:00:00.000Z"),
+        emisorName: "Test Company S.L.",
+        previousInvoiceNumber: "A-000001",
+        previousIssueDate: new Date("2026-03-15T00:00:00.000Z"),
+      },
+      "ANNULMENTHASH",
+      mockSoftware,
+    );
+    expect(xml).toContain("<sf:RegistroAnulacion>");
+    expect(xml).toContain("<sf:IDEmisorFacturaAnulada>B12345678</sf:IDEmisorFacturaAnulada>");
+    expect(xml).toContain("<sf:NumSerieFacturaAnulada>A-000001</sf:NumSerieFacturaAnulada>");
+    expect(xml).toContain("<sf:SinRegistroPrevio>N</sf:SinRegistroPrevio>");
+    expect(xml).toContain("<sf:RechazoPrevio>N</sf:RechazoPrevio>");
+    expect(xml).toContain("<sf:RegistroAnterior>");
+    expect(xml).toContain("<sf:Huella>ANNULMENTHASH</sf:Huella>");
+    expect(validateVerifactuXml(xml)).toEqual({ valid: true });
+  });
+
   it("submitToVerifactu in mock mode returns accepted with deterministic CSV", async () => {
     const result = await submitToVerifactu(baseInput, mockConfig);
     expect(result.status).toBe("accepted");
@@ -168,6 +198,25 @@ describe("verifactu/client", () => {
     expect(result.errorCode).toBeNull();
     expect(result.aeatCode).toBeNull();
     expect(result.response).toMatchObject({ mock: true });
+  });
+
+  it("cancelInVerifactu in mock mode returns an accepted RegistroAnulacion", async () => {
+    const result = await cancelInVerifactu(
+      {
+        nif: "B12345678",
+        cancelledInvoiceNumber: "A-000001",
+        cancelledInvoiceIssueDate: new Date("2026-03-15T00:00:00.000Z"),
+        previousHash: null,
+        generatedAt: new Date("2026-03-16T12:00:00.000Z"),
+        emisorName: "Test Company S.L.",
+        previousInvoiceNumber: null,
+        previousIssueDate: null,
+      },
+      mockConfig,
+    );
+    expect(result.status).toBe("accepted");
+    expect(result.hash).toMatch(/^[A-F0-9]{64}$/);
+    expect(result.idfact).toBe("B12345678-A-000001-20260315");
   });
 
   it("submitToVerifactu returns error when cert is missing in test mode", async () => {
@@ -236,6 +285,21 @@ describe("verifactu/facade", () => {
     expect(viaFacade.status).toBe("accepted");
     expect(viaFacade.hash).toBe(viaFn.hash);
     expect(viaFacade.idfact).toBe(viaFn.idfact);
+  });
+
+  it("cancelInvoice delegates to RegistroAnulacion submission", async () => {
+    const client = createVerifactuClient(mockConfig);
+    const result = await client.cancelInvoice({
+      nif: "B12345678",
+      cancelledInvoiceNumber: "A-000001",
+      cancelledInvoiceIssueDate: new Date("2026-03-15T00:00:00.000Z"),
+      previousHash: null,
+      generatedAt: new Date("2026-03-16T12:00:00.000Z"),
+      emisorName: "Test Company S.L.",
+      previousInvoiceNumber: null,
+      previousIssueDate: null,
+    });
+    expect(result.status).toBe("accepted");
   });
 
   it("buildQrUrl uses the bound config's environment/appUrl", () => {

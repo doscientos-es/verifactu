@@ -11,35 +11,51 @@
  * own `VerifactuConfig` and pass it to {@link createVerifactuClient}.
  */
 
-// ── Configuration contract (inputs) ─────────────────────────────────────────
-export type {
-  VerifactuEnvironment,
-  VerifactuCertificate,
-  VerifactuSoftware,
-  VerifactuConfig,
-  VerifactuQrConfig,
-} from "./types";
-
-// ── Invoice submission (inputs/outputs + free functions) ─────────────────────
+// ── Billing-record submission (inputs/outputs + free functions) ──────────────
+export {
+  buildVerifactuCancellationXml,
+  buildVerifactuXml,
+  cancelInVerifactu,
+  submitToVerifactu,
+} from "./client";
 export type {
   VatLine,
+  VerifactuCancellationInput,
+  VerifactuErrorCode,
   VerifactuSubmitInput,
   VerifactuSubmitResult,
-  VerifactuErrorCode,
 } from "./client";
-export { buildVerifactuXml, submitToVerifactu } from "./client";
-
-// ── QR generation ────────────────────────────────────────────────────────────
-export type { QrParams } from "./qr";
-export { buildQrDataUrl, buildQrUrl } from "./qr";
-
-// ── XML well-formedness validation ───────────────────────────────────────────
-export type { XmlValidationResult } from "./validate";
-export { validateVerifactuXml } from "./validate";
-
-// ── Logging port ─────────────────────────────────────────────────────────────
-export { type VerifactuLogger, noopLogger } from "./logger";
 
 // ── High-level facade (recommended entry point) ──────────────────────────────
-export type { VerifactuClient } from "./facade";
 export { createVerifactuClient } from "./facade";
+export type { VerifactuClient } from "./facade";
+
+// ── Hash-chain verification ───────────────────────────────────────────────────
+export {
+  buildCancellationHashPayload,
+  buildHashPayload,
+  computeCancellationHash,
+  computeInvoiceHash,
+  spanishTimestamp,
+} from "./hash";
+export type { CancellationHashInput, HashInput } from "./hash";
+
+// ── Logging port ─────────────────────────────────────────────────────────────
+export { noopLogger, type VerifactuLogger } from "./logger";
+
+// ── QR generation ────────────────────────────────────────────────────────────
+export { buildQrDataUrl, buildQrUrl } from "./qr";
+export type { QrParams } from "./qr";
+
+// ── Configuration contract (inputs) ─────────────────────────────────────────
+export type {
+  VerifactuCertificate,
+  VerifactuConfig,
+  VerifactuEnvironment,
+  VerifactuQrConfig,
+  VerifactuSoftware,
+} from "./types";
+
+// ── XML well-formedness validation ───────────────────────────────────────────
+export { validateVerifactuXml } from "./validate";
+export type { XmlValidationResult } from "./validate";
