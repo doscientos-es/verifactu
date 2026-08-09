@@ -70,4 +70,4 @@ jobs:
           fi
 
       - name: Publish
-        run: pnpm publish --no-git-checks --provenance --access public
+        run: pnpm publish --provenance --access public
