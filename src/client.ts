@@ -9,6 +9,7 @@ import {
 import { buildIdfact } from "./idfact";
 import { type VerifactuLogger, noopLogger } from "./logger";
 import { decodeP12Base64, loadP12Cert } from "./sign";
+import { validateVerifactuXsd } from "./schema";
 import type { VerifactuConfig, VerifactuSoftware } from "./types";
 import {
   validateVerifactuCancellation,
@@ -184,7 +185,9 @@ export function buildVerifactuXml(
     `      <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
     `      <sf:NIF>${esc(input.nif)}</sf:NIF>`,
     "    </sf:ObligadoEmision>",
-    input.incidence ? "    <sf:Incidencia>S</sf:Incidencia>" : null,
+    input.incidence
+      ? "    <sf:RemisionVoluntaria><sf:Incidencia>S</sf:Incidencia></sf:RemisionVoluntaria>"
+      : null,
     "  </sfLR:Cabecera>",
     "  <sfLR:RegistroFactura>",
     "    <sf:RegistroAlta>",
@@ -257,7 +260,9 @@ export function buildVerifactuCancellationXml(
     `      <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
     `      <sf:NIF>${esc(input.nif)}</sf:NIF>`,
     "    </sf:ObligadoEmision>",
-    input.incidence ? "    <sf:Incidencia>S</sf:Incidencia>" : null,
+    input.incidence
+      ? "    <sf:RemisionVoluntaria><sf:Incidencia>S</sf:Incidencia></sf:RemisionVoluntaria>"
+      : null,
     "  </sfLR:Cabecera>",
     "  <sfLR:RegistroFactura>",
     "    <sf:RegistroAnulacion>",
@@ -499,6 +504,27 @@ async function submitPayloadToVerifactu(
       errorCode: "xml_invalid",
       aeatCode: null,
     };
+  }
+
+  if (config.validateAgainstXsd !== false) {
+    const xsdValidation = validateVerifactuXsd(payload.xml);
+    if (!xsdValidation.valid) {
+      const first = xsdValidation.errors[0];
+      logger.error(
+        { record: payload.reference, reason: first?.message, line: first?.line },
+        "verifactu_xsd_invalid",
+      );
+      return {
+        status: "error",
+        csv: null,
+        hash: payload.hash,
+        idfact: payload.idfact,
+        response: { error: "XSD validation failed", errors: xsdValidation.errors },
+        errorMessage: `XML no conforme al esquema AEAT: ${first?.message ?? "error desconocido"}`,
+        errorCode: "xml_invalid",
+        aeatCode: null,
+      };
+    }
   }
 
   // ── Mock mode ────────────────────────────────────────────────────────────

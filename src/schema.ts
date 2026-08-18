@@ -1,18 +1,35 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import validateSchema, { type ValidationError } from "@richhouse83/xsd-validator";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import * as xsdValidatorModule from "@richhouse83/xsd-validator";
+import type { ValidationError } from "@richhouse83/xsd-validator";
 
 export type XsdValidationResult =
   | { valid: true }
   | { valid: false; errors: Array<{ message: string; line: number | null; column: number | null; code: number | null }> };
 
-function readSchema(name: string): string {
-  return readFileSync(new URL(`./schemas/${name}`, import.meta.url), "utf8");
+function schemaFile(name: string): URL {
+  return new URL(`./schemas/${name}`, import.meta.url);
 }
 
-const suministroLr = readSchema("SuministroLR.xsd");
-const suministroInformacion = readSchema("SuministroInformacion.xsd");
+function readSchema(name: string): string {
+  return readFileSync(schemaFile(name), "utf8");
+}
+
+const suministroInformacion = readSchema("SuministroInformacion.xsd").replace(
+  'schemaLocation="http://www.w3.org/TR/xmldsig-core/xmldsig-core-schema.xsd"',
+  `schemaLocation="${pathToFileURL(fileURLToPath(schemaFile("xmldsig-core-schema.xsd"))).href}"`,
+);
+const suministroLr = readSchema("SuministroLR.xsd").replace(
+  'schemaLocation="SuministroInformacion.xsd"',
+  `schemaLocation="${pathToFileURL(fileURLToPath(schemaFile("SuministroInformacion.xsd"))).href}"`,
+);
 const xmldsig = readSchema("xmldsig-core-schema.xsd");
+const validateSchema = (((xsdValidatorModule as unknown as { default?: unknown }).default as { default?: unknown } | undefined)?.default ??
+  (xsdValidatorModule as unknown as { default?: unknown }).default ??
+  xsdValidatorModule) as (
+  xml: string,
+  xsdSchema: string,
+) => true | ValidationError[];
 
 /**
  * Validate a Veri*Factu submission against the schemas published by AEAT.
@@ -20,9 +37,7 @@ const xmldsig = readSchema("xmldsig-core-schema.xsd");
  */
 export function validateVerifactuXsd(xml: string): XsdValidationResult {
   try {
-    const result = validateSchema(xml, suministroLr, undefined, {
-      baseUrl: fileURLToPath(new URL("./schemas/", import.meta.url)),
-    } as never);
+    const result = validateSchema(xml, suministroLr);
     if (result === true) return { valid: true };
     return { valid: false, errors: result.map(toValidationError) };
   } catch (error) {
