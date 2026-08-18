@@ -48,6 +48,10 @@ function hasText(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function validReferences(refs: Array<{ invoiceNumber: string; issueDate: Date }> | undefined): boolean {
+  return !refs || refs.length <= 1000 && refs.every((ref) => hasText(ref.invoiceNumber) && validDate(ref.issueDate));
+}
+
 function hasValidAmounts(lines: VatLine[], taxAmount: number, total: number): boolean {
   if (!Number.isFinite(taxAmount) || !Number.isFinite(total) || taxAmount < 0 || total < 0) {
     return false;
@@ -94,11 +98,28 @@ export function validateVerifactuSubmission(
   if (!hasValidAmounts(input.vatLines, input.taxAmount, input.total)) {
     return { valid: false, message: "El desglose de IVA no cuadra con los importes de la factura" };
   }
-  if (input.invoiceType !== "F1" && input.invoiceType !== "F2") {
+  const supportedTypes = new Set(["F1", "F2", "R1", "R2", "R3", "R4", "R5"]);
+  if (!supportedTypes.has(input.invoiceType)) {
     return {
       valid: false,
       message: `Tipo de factura ${input.invoiceType} no soportado aún por este SIF`,
     };
+  }
+  const rectificative = input.invoiceType.startsWith("R");
+  if (rectificative && !input.rectificationType) {
+    return { valid: false, message: "Una factura rectificativa requiere TipoRectificativa" };
+  }
+  if (!rectificative && (input.rectificationType || input.rectifiedInvoices?.length || input.substitutedInvoices?.length || input.rectificationAmounts)) {
+    return { valid: false, message: "Los datos de rectificación solo pueden usarse con una factura rectificativa" };
+  }
+  if (!validReferences(input.rectifiedInvoices) || !validReferences(input.substitutedInvoices)) {
+    return { valid: false, message: "Las referencias de facturas rectificadas no son válidas" };
+  }
+  if (input.rechazoPrevio === "X" && input.subsanacion !== "S") {
+    return { valid: false, message: "RechazoPrevio=X requiere Subsanacion=S" };
+  }
+  if (input.externalReference !== undefined && (input.externalReference.trim().length === 0 || input.externalReference.length > 60)) {
+    return { valid: false, message: "La referencia externa debe tener entre 1 y 60 caracteres" };
   }
   if (input.invoiceType === "F1" && (!hasText(input.clientNif) || !hasText(input.clientName))) {
     return { valid: false, message: "Una factura F1 requiere NIF y razón social del destinatario" };

@@ -18,11 +18,24 @@ import {
 } from "./validate";
 
 export type VatLine = { rate: number; base: number; tax: number };
+export type InvoiceReference = { invoiceNumber: string; issueDate: Date };
 
 export type VerifactuSubmitInput = {
   nif: string;
   invoiceNumber: string;
   invoiceType: string;
+  /** Optional AEAT reference for idempotency/audit correlation. */
+  externalReference?: string;
+  /** Required for rectificative invoices and optional for other correction flows. */
+  rectificationType?: "S" | "I";
+  rectifiedInvoices?: InvoiceReference[];
+  substitutedInvoices?: InvoiceReference[];
+  rectificationAmounts?: { base: number; tax: number; surcharge?: number };
+  operationDate?: Date;
+  /** S for a correcting registration; N is omitted from the XML. */
+  subsanacion?: "S" | "N";
+  /** N, S or X according to the AEAT previous-rejection flow. */
+  rechazoPrevio?: "N" | "S" | "X";
   issueDate: Date;
   taxAmount: number;
   total: number;
@@ -59,6 +72,7 @@ export type VerifactuCancellationInput = {
   sinRegistroPrevio?: "S" | "N";
   /** Whether AEAT previously rejected this annulment (defaults to N). */
   rechazoPrevio?: "S" | "N";
+  externalReference?: string;
   /** Set only when retrying after an AEAT or connectivity incident. */
   incidence?: boolean;
 };
@@ -69,6 +83,7 @@ export type VerifactuCancellationInput = {
  *  - `cert_missing`  → no P12 certificate/password configured
  *  - `cert_invalid`  → the P12 failed to load (bad file or password)
  *  - `xml_invalid`   → the payload we generated is not well-formed XML
+ *  - `xsd_invalid`   → the payload is well-formed but fails the official AEAT XSD
  *  - `configuration_invalid` → unsupported or incomplete local fiscal data
  *  - `network_error` → transport failure reaching AEAT
  *  - `http_error`    → AEAT responded with HTTP >= 400
@@ -79,6 +94,7 @@ export type VerifactuErrorCode =
   | "cert_missing"
   | "cert_invalid"
   | "xml_invalid"
+  | "xsd_invalid"
   | "configuration_invalid"
   | "network_error"
   | "http_error"
@@ -110,6 +126,21 @@ function ddmmyyyy(d: Date): string {
   const dd = String(d.getUTCDate()).padStart(2, "0");
   const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `${dd}-${mm}-${d.getUTCFullYear()}`;
+}
+
+function renderInvoiceReferences(tag: string, refs: InvoiceReference[] | undefined, nif: string): string | null {
+  if (!refs?.length) return null;
+  return [
+    `      <sf:${tag}>`,
+    ...refs.flatMap((ref) => [
+      `        <sf:${tag === "FacturasRectificadas" ? "IDFacturaRectificada" : "IDFacturaSustituida"}>`,
+      `          <sf:IDEmisorFactura>${esc(nif)}</sf:IDEmisorFactura>`,
+      `          <sf:NumSerieFactura>${esc(ref.invoiceNumber)}</sf:NumSerieFactura>`,
+      `          <sf:FechaExpedicionFactura>${ddmmyyyy(ref.issueDate)}</sf:FechaExpedicionFactura>`,
+      `        </sf:${tag === "FacturasRectificadas" ? "IDFacturaRectificada" : "IDFacturaSustituida"}>`,
+    ]),
+    `      </sf:${tag}>`,
+  ].join("\n");
 }
 
 /**
@@ -197,8 +228,26 @@ export function buildVerifactuXml(
     `        <sf:NumSerieFactura>${esc(input.invoiceNumber)}</sf:NumSerieFactura>`,
     `        <sf:FechaExpedicionFactura>${ddmmyyyy(input.issueDate)}</sf:FechaExpedicionFactura>`,
     "      </sf:IDFactura>",
+    input.externalReference ? `      <sf:RefExterna>${esc(input.externalReference.slice(0, 60))}</sf:RefExterna>` : null,
+    input.subsanacion === "S" ? "      <sf:Subsanacion>S</sf:Subsanacion>" : null,
+    input.rechazoPrevio ? `      <sf:RechazoPrevio>${input.rechazoPrevio}</sf:RechazoPrevio>` : null,
     `      <sf:NombreRazonEmisor>${esc(input.emisorName)}</sf:NombreRazonEmisor>`,
     `      <sf:TipoFactura>${esc(input.invoiceType)}</sf:TipoFactura>`,
+    input.rectificationType ? `      <sf:TipoRectificativa>${input.rectificationType}</sf:TipoRectificativa>` : null,
+    renderInvoiceReferences("FacturasRectificadas", input.rectifiedInvoices, input.nif),
+    renderInvoiceReferences("FacturasSustituidas", input.substitutedInvoices, input.nif),
+    input.rectificationAmounts
+      ? [
+        "      <sf:ImporteRectificacion>",
+        `        <sf:BaseRectificada>${input.rectificationAmounts.base.toFixed(2)}</sf:BaseRectificada>`,
+        `        <sf:CuotaRectificada>${input.rectificationAmounts.tax.toFixed(2)}</sf:CuotaRectificada>`,
+        input.rectificationAmounts.surcharge == null
+          ? null
+          : `        <sf:CuotaRecargoRectificado>${input.rectificationAmounts.surcharge.toFixed(2)}</sf:CuotaRecargoRectificado>`,
+        "      </sf:ImporteRectificacion>",
+      ].filter((line) => line !== null).join("\n")
+      : null,
+    input.operationDate ? `      <sf:FechaOperacion>${ddmmyyyy(input.operationDate)}</sf:FechaOperacion>` : null,
     `      <sf:DescripcionOperacion>${esc(input.descriptionOperacion.slice(0, 250))}</sf:DescripcionOperacion>`,
     destinatarios,
     "      <sf:Desglose>",
@@ -272,6 +321,7 @@ export function buildVerifactuCancellationXml(
     `        <sf:NumSerieFacturaAnulada>${esc(input.cancelledInvoiceNumber)}</sf:NumSerieFacturaAnulada>`,
     `        <sf:FechaExpedicionFacturaAnulada>${ddmmyyyy(input.cancelledInvoiceIssueDate)}</sf:FechaExpedicionFacturaAnulada>`,
     "      </sf:IDFactura>",
+    input.externalReference ? `      <sf:RefExterna>${esc(input.externalReference.slice(0, 60))}</sf:RefExterna>` : null,
     `      <sf:SinRegistroPrevio>${input.sinRegistroPrevio ?? "N"}</sf:SinRegistroPrevio>`,
     `      <sf:RechazoPrevio>${input.rechazoPrevio ?? "N"}</sf:RechazoPrevio>`,
     encadenamiento,
@@ -521,7 +571,7 @@ async function submitPayloadToVerifactu(
         idfact: payload.idfact,
         response: { error: "XSD validation failed", errors: xsdValidation.errors },
         errorMessage: `XML no conforme al esquema AEAT: ${first?.message ?? "error desconocido"}`,
-        errorCode: "xml_invalid",
+        errorCode: "xsd_invalid",
         aeatCode: null,
       };
     }

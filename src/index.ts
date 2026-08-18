@@ -20,6 +20,7 @@ export {
 } from "./client";
 export type {
   VatLine,
+  InvoiceReference,
   VerifactuCancellationInput,
   VerifactuErrorCode,
   VerifactuSubmitInput,

@@ -1,8 +1,8 @@
 # @doscientos/verifactu
 
 Framework-agnostic **Verifactu (AEAT)** toolkit for Node.js: billing-record
-registration (`RegistroAlta` and `RegistroAnulacion`), the SIF SHA-256 hash
-chain, and tributary QR generation.
+registration (`RegistroAlta` and `RegistroAnulacion`), official AEAT XSD
+validation, the SIF SHA-256 hash chain, and tributary QR generation.
 
 - **Server-only.** Uses `node:crypto`, mutual-TLS and `node-forge`. Run it from
   Next.js Server Actions / Route Handlers, a Node server, or a worker — **never
@@ -107,6 +107,7 @@ type VerifactuConfig = {
 | `buildVerifactuXml(input, hash, software)` | Build the `RegistroAlta` XML payload. |
 | `buildQrUrl(params, config)` / `buildQrDataUrl(url)` | QR helpers. |
 | `validateVerifactuXml(xml)` | XML well-formedness check. |
+| `validateVerifactuXsd(xml)` | Validation against the bundled AEAT `SuministroLR`/`SuministroInformacion` schemas. |
 | `noopLogger` / `VerifactuLogger` | Optional logging port (pino-compatible). |
 
 Types: `VerifactuConfig`, `VerifactuCertificate`, `VerifactuSoftware`,

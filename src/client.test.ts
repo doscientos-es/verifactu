@@ -6,6 +6,7 @@ import {
   submitToVerifactu,
 } from "./client";
 import { createVerifactuClient } from "./index";
+import { validateVerifactuXsd } from "./schema";
 import type { VerifactuConfig, VerifactuSoftware } from "./types";
 import { validateVerifactuXml } from "./validate";
 
@@ -127,7 +128,9 @@ describe("verifactu/client", () => {
 
   it("sets Incidencia only for an incident retry", () => {
     const xml = buildVerifactuXml({ ...baseInput, incidence: true }, "HASH", mockSoftware);
-    expect(xml).toContain("<sf:Incidencia>S</sf:Incidencia>");
+    expect(xml).toContain(
+      "<sf:RemisionVoluntaria><sf:Incidencia>S</sf:Incidencia></sf:RemisionVoluntaria>",
+    );
   });
 
   it("buildVerifactuCancellationXml identifies and chains an annulled invoice", () => {
@@ -223,6 +226,26 @@ describe("verifactu/client", () => {
   it("generated XML passes the well-formedness gate", () => {
     const xml = buildVerifactuXml(baseInput, "deadbeef", mockSoftware);
     expect(validateVerifactuXml(xml)).toEqual({ valid: true });
+  });
+
+  it("generated Alta and Anulacion records conform to the bundled AEAT XSDs", () => {
+    const alta = buildVerifactuXml(baseInput, "A".repeat(64), mockSoftware);
+    const anulacion = buildVerifactuCancellationXml(
+      {
+        nif: "B12345678",
+        cancelledInvoiceNumber: "A-000001",
+        cancelledInvoiceIssueDate: new Date("2026-03-15T00:00:00.000Z"),
+        previousHash: null,
+        generatedAt: new Date("2026-03-16T12:00:00.000Z"),
+        emisorName: "Test Company S.L.",
+        previousInvoiceNumber: null,
+        previousIssueDate: null,
+      },
+      "B".repeat(64),
+      mockSoftware,
+    );
+    expect(validateVerifactuXsd(alta)).toEqual({ valid: true });
+    expect(validateVerifactuXsd(anulacion)).toEqual({ valid: true });
   });
 
   it("validateVerifactuXml flags malformed XML with a message", () => {

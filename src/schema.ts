@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import * as xsdValidatorModule from "@richhouse83/xsd-validator";
 import type { ValidationError } from "@richhouse83/xsd-validator";
+import * as xsdValidatorModule from "@richhouse83/xsd-validator";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 export type XsdValidationResult =
   | { valid: true }
@@ -15,29 +15,34 @@ function readSchema(name: string): string {
   return readFileSync(schemaFile(name), "utf8");
 }
 
-const suministroInformacion = readSchema("SuministroInformacion.xsd").replace(
-  'schemaLocation="http://www.w3.org/TR/xmldsig-core/xmldsig-core-schema.xsd"',
-  `schemaLocation="${pathToFileURL(fileURLToPath(schemaFile("xmldsig-core-schema.xsd"))).href}"`,
-);
-const suministroLr = readSchema("SuministroLR.xsd").replace(
-  'schemaLocation="SuministroInformacion.xsd"',
-  `schemaLocation="${pathToFileURL(fileURLToPath(schemaFile("SuministroInformacion.xsd"))).href}"`,
-);
+const suministroInformacion = readSchema("SuministroInformacion.xsd");
+const suministroLr = readSchema("SuministroLR.xsd");
 const xmldsig = readSchema("xmldsig-core-schema.xsd");
+const schemasBaseUrl = fileURLToPath(new URL("./schemas/", import.meta.url));
 const validateSchema = (((xsdValidatorModule as unknown as { default?: unknown }).default as { default?: unknown } | undefined)?.default ??
   (xsdValidatorModule as unknown as { default?: unknown }).default ??
   xsdValidatorModule) as (
-  xml: string,
-  xsdSchema: string,
-) => true | ValidationError[];
+    xml: string,
+    xsdSchema: string,
+    xmlParserOptions?: { nonet?: boolean },
+    xsdParserOptions?: { baseUrl?: string; nonet?: boolean },
+  ) => true | ValidationError[];
 
 /**
  * Validate a Veri*Factu submission against the schemas published by AEAT.
  * The schemas are packaged with the module; no network call is made here.
  */
 export function validateVerifactuXsd(xml: string): XsdValidationResult {
+  if (typeof xml !== "string" || xml.length === 0) {
+    return { valid: false, errors: [{ message: "XML vacío", line: null, column: null, code: null }] };
+  }
   try {
-    const result = validateSchema(xml, suministroLr);
+    const result = validateSchema(
+      xml,
+      suministroLr,
+      { nonet: true },
+      { baseUrl: schemasBaseUrl, nonet: true },
+    );
     if (result === true) return { valid: true };
     return { valid: false, errors: result.map(toValidationError) };
   } catch (error) {
