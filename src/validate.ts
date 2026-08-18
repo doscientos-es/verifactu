@@ -82,7 +82,10 @@ function hasValidAmounts(lines: VatLine[], taxAmount: number, total: number): bo
     }
     return sum + line.tax;
   }, 0);
-  const baseFromLines = lines.reduce((sum, line) => sum + line.base, 0);
+  const baseFromLines = lines.reduce(
+    (sum, line) => sum + (Number.isFinite(line?.base) ? line.base : Number.NaN),
+    0,
+  );
   return (
     Number.isFinite(taxFromLines) &&
     Math.abs(taxFromLines - taxAmount) < 0.005 &&
