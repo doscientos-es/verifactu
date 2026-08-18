@@ -84,7 +84,11 @@ reference adapter that reads environment variables is provided in
 type VerifactuConfig = {
   environment: "mock" | "test" | "prod";
   certificate: { p12Base64: string; password: string };
-  software: { name: string; id: string; version: string; installationNumber: string };
+  software: {
+    producerName: string; producerNif: string;
+    name: string; id: string; version: string; installationNumber: string;
+    onlyVerifactu: boolean; multipleTaxpayers: boolean;
+  };
   appUrl: string; // used to build the mock QR verify route
 };
 ```

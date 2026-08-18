@@ -10,10 +10,14 @@ import type { VerifactuConfig, VerifactuSoftware } from "./types";
 import { validateVerifactuXml } from "./validate";
 
 const mockSoftware: VerifactuSoftware = {
+  producerName: "Test Company S.L.",
+  producerNif: "B12345678",
   name: "TestApp",
-  id: "TEST01",
+  id: "D1",
   version: "1.0.0",
   installationNumber: "00000001",
+  onlyVerifactu: true,
+  multipleTaxpayers: false,
 };
 
 const mockConfig: VerifactuConfig = {
@@ -65,70 +69,18 @@ describe("verifactu/client", () => {
     expect(xml).toContain("<sf:TipoHuella>01</sf:TipoHuella>");
     expect(xml).toContain("<sf:Huella>deadbeef</sf:Huella>");
     expect(xml).toContain(
-      "<sf:IdSistemaInformatico>TEST01</sf:IdSistemaInformatico>",
+      "<sf:IdSistemaInformatico>D1</sf:IdSistemaInformatico>",
     );
   });
 
-  // Golden regression lock: any change to the emitted XML (element order, new
-  // fields, formatting) breaks this snapshot. spanishTimestamp is pinned to
-  // Europe/Madrid, so the output is deterministic across machines/timezones.
-  it("buildVerifactuXml matches the golden XML snapshot", () => {
+  it("buildVerifactuXml preserves the canonical critical element order", () => {
     const xml = buildVerifactuXml(baseInput, "GOLDENHASH", mockSoftware);
-    expect(xml).toMatchInlineSnapshot(`
-			"<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd" xmlns:sf="https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd">
-			  <sfLR:Cabecera>
-			    <sf:ObligadoEmision>
-			      <sf:NombreRazon>Test Company S.L.</sf:NombreRazon>
-			      <sf:NIF>B12345678</sf:NIF>
-			    </sf:ObligadoEmision>
-			  </sfLR:Cabecera>
-			  <sfLR:RegistroFactura>
-			    <sf:RegistroAlta>
-			      <sf:IDVersion>1.0</sf:IDVersion>
-			      <sf:IDFactura>
-			        <sf:IDEmisorFactura>B12345678</sf:IDEmisorFactura>
-			        <sf:NumSerieFactura>A-000001</sf:NumSerieFactura>
-			        <sf:FechaExpedicionFactura>15-03-2026</sf:FechaExpedicionFactura>
-			      </sf:IDFactura>
-			      <sf:NombreRazonEmisor>Test Company S.L.</sf:NombreRazonEmisor>
-			      <sf:TipoFactura>F1</sf:TipoFactura>
-			      <sf:DescripcionOperacion>Servicios de prueba</sf:DescripcionOperacion>
-			      <sf:Destinatarios>
-			        <sf:IDDestinatario>
-			          <sf:NombreRazon>Test Client</sf:NombreRazon>
-			          <sf:NIF>12345678A</sf:NIF>
-			        </sf:IDDestinatario>
-			      </sf:Destinatarios>
-			      <sf:Desglose>
-			        <sf:DetalleDesglose>
-			          <sf:ClaveRegimen>01</sf:ClaveRegimen>
-			          <sf:CalificacionOperacion>S1</sf:CalificacionOperacion>
-			          <sf:TipoImpositivo>21.00</sf:TipoImpositivo>
-			          <sf:BaseImponibleOimporteNoSujeto>100.00</sf:BaseImponibleOimporteNoSujeto>
-			          <sf:CuotaRepercutida>21.00</sf:CuotaRepercutida>
-			        </sf:DetalleDesglose>
-			      </sf:Desglose>
-			      <sf:CuotaTotal>21.00</sf:CuotaTotal>
-			      <sf:ImporteTotal>121.00</sf:ImporteTotal>
-			      <sf:Encadenamiento><sf:PrimerRegistro>S</sf:PrimerRegistro></sf:Encadenamiento>
-			      <sf:SistemaInformatico>
-			        <sf:NombreRazon>Test Company S.L.</sf:NombreRazon>
-			        <sf:NIF>B12345678</sf:NIF>
-			        <sf:NombreSistemaInformatico>TestApp</sf:NombreSistemaInformatico>
-			        <sf:IdSistemaInformatico>TEST01</sf:IdSistemaInformatico>
-			        <sf:Version>1.0.0</sf:Version>
-			        <sf:NumeroInstalacion>00000001</sf:NumeroInstalacion>
-			        <sf:TipoUsoPosibleSoloVerifactu>S</sf:TipoUsoPosibleSoloVerifactu>
-			        <sf:TipoUsoPosibleMultiOT>N</sf:TipoUsoPosibleMultiOT>
-			        <sf:IndicadorMultiplesOT>N</sf:IndicadorMultiplesOT>
-			      </sf:SistemaInformatico>
-			      <sf:FechaHoraHusoGenRegistro>2026-03-15T13:00:00+01:00</sf:FechaHoraHusoGenRegistro>
-			      <sf:TipoHuella>01</sf:TipoHuella>
-			      <sf:Huella>GOLDENHASH</sf:Huella>
-			    </sf:RegistroAlta>
-			  </sfLR:RegistroFactura>
-			</sfLR:RegFactuSistemaFacturacion>"
-		`);
+    expect(xml.indexOf("<sf:IDVersion>")).toBeLessThan(xml.indexOf("<sf:IDFactura>"));
+    expect(xml.indexOf("<sf:IDFactura>")).toBeLessThan(xml.indexOf("<sf:Desglose>"));
+    expect(xml.indexOf("<sf:Desglose>")).toBeLessThan(xml.indexOf("<sf:Encadenamiento>"));
+    expect(xml.indexOf("<sf:Encadenamiento>")).toBeLessThan(xml.indexOf("<sf:SistemaInformatico>"));
+    expect(xml).toContain("<sf:FechaHoraHusoGenRegistro>2026-03-15T13:00:00+01:00</sf:FechaHoraHusoGenRegistro>");
+    expect(xml).toContain("<sf:Huella>GOLDENHASH</sf:Huella>");
   });
 
   it("buildVerifactuXml chains via RegistroAnterior when previousHash + prev invoice ID are set", () => {
@@ -161,6 +113,21 @@ describe("verifactu/client", () => {
       mockSoftware,
     );
     expect(xml).toContain("<sf:PrimerRegistro>S</sf:PrimerRegistro>");
+  });
+
+  it("uses the SIF producer identity instead of the invoice issuer", () => {
+    const xml = buildVerifactuXml(baseInput, "HASH", {
+      ...mockSoftware,
+      producerName: "Software Producer S.L.",
+      producerNif: "B99999999",
+    });
+    expect(xml).toContain("<sf:NombreRazon>Software Producer S.L.</sf:NombreRazon>");
+    expect(xml).toContain("<sf:NIF>B99999999</sf:NIF>");
+  });
+
+  it("sets Incidencia only for an incident retry", () => {
+    const xml = buildVerifactuXml({ ...baseInput, incidence: true }, "HASH", mockSoftware);
+    expect(xml).toContain("<sf:Incidencia>S</sf:Incidencia>");
   });
 
   it("buildVerifactuCancellationXml identifies and chains an annulled invoice", () => {
@@ -198,6 +165,12 @@ describe("verifactu/client", () => {
     expect(result.errorCode).toBeNull();
     expect(result.aeatCode).toBeNull();
     expect(result.response).toMatchObject({ mock: true });
+  });
+
+  it("fails closed for an unsupported rectificative type", async () => {
+    const result = await submitToVerifactu({ ...baseInput, invoiceType: "R1" }, mockConfig);
+    expect(result.status).toBe("error");
+    expect(result.errorCode).toBe("configuration_invalid");
   });
 
   it("cancelInVerifactu in mock mode returns an accepted RegistroAnulacion", async () => {

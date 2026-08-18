@@ -16,14 +16,14 @@ export {
   buildVerifactuCancellationXml,
   buildVerifactuXml,
   cancelInVerifactu,
-  submitToVerifactu,
+  submitToVerifactu
 } from "./client";
 export type {
   VatLine,
   VerifactuCancellationInput,
   VerifactuErrorCode,
   VerifactuSubmitInput,
-  VerifactuSubmitResult,
+  VerifactuSubmitResult
 } from "./client";
 
 // ── High-level facade (recommended entry point) ──────────────────────────────
@@ -36,7 +36,7 @@ export {
   buildHashPayload,
   computeCancellationHash,
   computeInvoiceHash,
-  spanishTimestamp,
+  spanishTimestamp
 } from "./hash";
 export type { CancellationHashInput, HashInput } from "./hash";
 
@@ -53,9 +53,17 @@ export type {
   VerifactuConfig,
   VerifactuEnvironment,
   VerifactuQrConfig,
-  VerifactuSoftware,
+  VerifactuSoftware
 } from "./types";
 
-// ── XML well-formedness validation ───────────────────────────────────────────
-export { validateVerifactuXml } from "./validate";
-export type { XmlValidationResult } from "./validate";
+// ── Local XML and fiscal validation ──────────────────────────────────────────
+export {
+  validateVerifactuCancellation,
+  validateVerifactuSubmission,
+  validateVerifactuXml
+} from "./validate";
+export type { FiscalValidationResult, XmlValidationResult } from "./validate";
+
+export { validateVerifactuXsd } from "./schema";
+export type { XsdValidationResult } from "./schema";
+

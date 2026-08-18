@@ -26,10 +26,18 @@ export type VerifactuCertificate = {
  * registered. Every consuming project supplies its own registration data.
  */
 export type VerifactuSoftware = {
+  /** Legal name of the producer/developer of this SIF. */
+  producerName: string;
+  /** Spanish tax identifier of the SIF producer/developer. */
+  producerNif: string;
   name: string;
   id: string;
   version: string;
   installationNumber: string;
+  /** True only when the product cannot operate outside VERI*FACTU mode. */
+  onlyVerifactu: boolean;
+  /** Whether this installation can serve multiple taxpayers. */
+  multipleTaxpayers: boolean;
 };
 
 /**
@@ -42,6 +50,12 @@ export type VerifactuConfig = {
   software: VerifactuSoftware;
   /** Base URL of the consuming app — used to build the mock QR verify route. */
   appUrl: string;
+  /** Upper bound for one AEAT SOAP request. Defaults to 30 seconds. */
+  requestTimeoutMs?: number;
+  /** Upper bound for an AEAT SOAP response body. Defaults to 1 MiB. */
+  maxResponseBytes?: number;
+  /** Validate generated submissions against the bundled AEAT XSDs. Defaults to true. */
+  validateAgainstXsd?: boolean;
 };
 
 /** Minimal config subset needed to build the tributary QR URL. */

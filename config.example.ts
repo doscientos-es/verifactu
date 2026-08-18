@@ -25,11 +25,15 @@ export function verifactuConfigFromEnv(): VerifactuConfig {
       password: process.env.VERIFACTU_CERT_PASSWORD ?? "",
     },
     software: {
-      // SistemaInformatico values assigned by AEAT when your software registers.
+      // The producer identity is distinct from the taxpayer that issues invoices.
+      producerName: process.env.VERIFACTU_PRODUCER_NAME ?? "",
+      producerNif: process.env.VERIFACTU_PRODUCER_NIF ?? "",
       name: process.env.VERIFACTU_SOFTWARE_NAME ?? "",
       id: process.env.VERIFACTU_SOFTWARE_ID ?? "",
       version: process.env.VERIFACTU_SOFTWARE_VERSION ?? "",
       installationNumber: process.env.VERIFACTU_INSTALLATION_NUMBER ?? "",
+      onlyVerifactu: true,
+      multipleTaxpayers: false,
     },
     // Base URL of your app — used to build the mock QR verify route.
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
