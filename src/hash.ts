@@ -41,11 +41,9 @@ export type CancellationHashInput = {
 
 const MADRID_TZ = "Europe/Madrid";
 
-function ddmmyyyy(d: Date): string {
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const yyyy = String(d.getUTCFullYear());
-  return `${dd}-${mm}-${yyyy}`;
+/** Calendar date used by AEAT, interpreted in the Spanish tax timezone. */
+export function spanishDate(d: Date): string {
+  return formatInTimeZone(d, MADRID_TZ, "dd-MM-yyyy");
 }
 
 function n2(x: number): string {
@@ -65,7 +63,7 @@ export function buildHashPayload(input: HashInput): string {
   return [
     `IDEmisorFactura=${input.nif.trim()}`,
     `NumSerieFactura=${input.invoiceNumber.trim()}`,
-    `FechaExpedicionFactura=${ddmmyyyy(input.issueDate)}`,
+    `FechaExpedicionFactura=${spanishDate(input.issueDate)}`,
     `TipoFactura=${input.invoiceType.trim()}`,
     `CuotaTotal=${n2(input.taxAmount)}`,
     `ImporteTotal=${n2(input.total)}`,
@@ -93,7 +91,7 @@ export function buildCancellationHashPayload(
   return [
     `IDEmisorFacturaAnulada=${input.nif.trim()}`,
     `NumSerieFacturaAnulada=${input.cancelledInvoiceNumber.trim()}`,
-    `FechaExpedicionFacturaAnulada=${ddmmyyyy(input.cancelledInvoiceIssueDate)}`,
+    `FechaExpedicionFacturaAnulada=${spanishDate(input.cancelledInvoiceIssueDate)}`,
     `Huella=${previous}`,
     `FechaHoraHusoGenRegistro=${spanishTimestamp(input.generatedAt)}`,
   ].join("&");

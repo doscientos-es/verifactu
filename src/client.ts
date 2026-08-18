@@ -4,6 +4,7 @@ import { AEAT_SOAP_ACTION_REG_FACTU, AEAT_SOAP_ENDPOINT } from "./constants";
 import {
   computeCancellationHash,
   computeInvoiceHash,
+  spanishDate,
   spanishTimestamp,
 } from "./hash";
 import { buildIdfact } from "./idfact";
@@ -126,12 +127,6 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function ddmmyyyy(d: Date): string {
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  return `${dd}-${mm}-${d.getUTCFullYear()}`;
-}
-
 function renderInvoiceReferences(tag: string, refs: InvoiceReference[] | undefined, nif: string): string | null {
   if (!refs?.length) return null;
   return [
@@ -140,7 +135,7 @@ function renderInvoiceReferences(tag: string, refs: InvoiceReference[] | undefin
       `        <sf:${tag === "FacturasRectificadas" ? "IDFacturaRectificada" : "IDFacturaSustituida"}>`,
       `          <sf:IDEmisorFactura>${esc(nif)}</sf:IDEmisorFactura>`,
       `          <sf:NumSerieFactura>${esc(ref.invoiceNumber)}</sf:NumSerieFactura>`,
-      `          <sf:FechaExpedicionFactura>${ddmmyyyy(ref.issueDate)}</sf:FechaExpedicionFactura>`,
+      `          <sf:FechaExpedicionFactura>${spanishDate(ref.issueDate)}</sf:FechaExpedicionFactura>`,
       `        </sf:${tag === "FacturasRectificadas" ? "IDFacturaRectificada" : "IDFacturaSustituida"}>`,
     ]),
     `      </sf:${tag}>`,
@@ -178,7 +173,7 @@ export function buildVerifactuXml(
         "        <sf:RegistroAnterior>",
         `          <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
         `          <sf:NumSerieFactura>${esc(input.previousInvoiceNumber)}</sf:NumSerieFactura>`,
-        `          <sf:FechaExpedicionFactura>${ddmmyyyy(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
+        `          <sf:FechaExpedicionFactura>${spanishDate(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
         `          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
         "        </sf:RegistroAnterior>",
         "      </sf:Encadenamiento>",
@@ -230,7 +225,7 @@ export function buildVerifactuXml(
     "      <sf:IDFactura>",
     `        <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
     `        <sf:NumSerieFactura>${esc(input.invoiceNumber)}</sf:NumSerieFactura>`,
-    `        <sf:FechaExpedicionFactura>${ddmmyyyy(input.issueDate)}</sf:FechaExpedicionFactura>`,
+    `        <sf:FechaExpedicionFactura>${spanishDate(input.issueDate)}</sf:FechaExpedicionFactura>`,
     "      </sf:IDFactura>",
     input.externalReference ? `      <sf:RefExterna>${esc(input.externalReference.slice(0, 60))}</sf:RefExterna>` : null,
     input.subsanacion === "S" ? "      <sf:Subsanacion>S</sf:Subsanacion>" : null,
@@ -251,7 +246,7 @@ export function buildVerifactuXml(
         "      </sf:ImporteRectificacion>",
       ].filter((line) => line !== null).join("\n")
       : null,
-    input.operationDate ? `      <sf:FechaOperacion>${ddmmyyyy(input.operationDate)}</sf:FechaOperacion>` : null,
+    input.operationDate ? `      <sf:FechaOperacion>${spanishDate(input.operationDate)}</sf:FechaOperacion>` : null,
     `      <sf:DescripcionOperacion>${esc(input.descriptionOperacion.slice(0, 250))}</sf:DescripcionOperacion>`,
     destinatarios,
     "      <sf:Desglose>",
@@ -299,7 +294,7 @@ export function buildVerifactuCancellationXml(
         "        <sf:RegistroAnterior>",
         `          <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
         `          <sf:NumSerieFactura>${esc(input.previousInvoiceNumber)}</sf:NumSerieFactura>`,
-        `          <sf:FechaExpedicionFactura>${ddmmyyyy(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
+        `          <sf:FechaExpedicionFactura>${spanishDate(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
         `          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
         "        </sf:RegistroAnterior>",
         "      </sf:Encadenamiento>",
@@ -323,7 +318,7 @@ export function buildVerifactuCancellationXml(
     "      <sf:IDFactura>",
     `        <sf:IDEmisorFacturaAnulada>${esc(input.nif)}</sf:IDEmisorFacturaAnulada>`,
     `        <sf:NumSerieFacturaAnulada>${esc(input.cancelledInvoiceNumber)}</sf:NumSerieFacturaAnulada>`,
-    `        <sf:FechaExpedicionFacturaAnulada>${ddmmyyyy(input.cancelledInvoiceIssueDate)}</sf:FechaExpedicionFacturaAnulada>`,
+    `        <sf:FechaExpedicionFacturaAnulada>${spanishDate(input.cancelledInvoiceIssueDate)}</sf:FechaExpedicionFacturaAnulada>`,
     "      </sf:IDFactura>",
     input.externalReference ? `      <sf:RefExterna>${esc(input.externalReference.slice(0, 60))}</sf:RefExterna>` : null,
     `      <sf:SinRegistroPrevio>${input.sinRegistroPrevio ?? "N"}</sf:SinRegistroPrevio>`,
