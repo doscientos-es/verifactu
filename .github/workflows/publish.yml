@@ -1,48 +1,46 @@
-name: Publish
+name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
 
 concurrency:
-  group: publish-${{ github.ref }}
+  group: release-please
   cancel-in-progress: false
 
 env:
   PNPM_VERSION: 9.15.2
 
 jobs:
-  # ── Guard: full suite must pass before publishing ────────────────────────────
-  verify:
-    name: Verify
+  release:
+    name: Create release PR or GitHub Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
+      - id: release
+        uses: googleapis/release-please-action@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
+          release-type: node
+          package-name: "@doscientos/verifactu"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test
-
-  # ── Publish to npm ───────────────────────────────────────────────────────────
   publish:
-    name: Publish to npm
+    name: Verify and publish to npm
     runs-on: ubuntu-latest
-    needs: verify
+    needs: release
+    if: ${{ needs.release.outputs.release_created == 'true' }}
     permissions:
       contents: read
-      id-token: write   # required for npm provenance
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag_name }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -54,18 +52,17 @@ jobs:
           cache: pnpm
           registry-url: "https://registry.npmjs.org"
 
-      # Trusted publishing requires npm ≥ 11.5.1 (Node 22 ships with npm 10.x)
+      # npm Trusted Publishing gives the package provenance without storing an npm token.
       - run: npm install -g npm@latest
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
-      # Ensure the version in package.json matches the Git tag
       - name: Assert version matches tag
         run: |
           PKG_VERSION="v$(node -p "require('./package.json').version")"
-          if [ "$PKG_VERSION" != "${{ github.ref_name }}" ]; then
-            echo "❌ package.json version ($PKG_VERSION) does not match tag (${{ github.ref_name }})"
+          if [ "$PKG_VERSION" != "${{ needs.release.outputs.tag_name }}" ]; then
+            echo "❌ package.json version ($PKG_VERSION) does not match tag (${{ needs.release.outputs.tag_name }})"
             exit 1
           fi
 

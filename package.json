@@ -49,11 +49,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "pnpm run build",
-    "release:patch": "pnpm version patch",
-    "release:minor": "pnpm version minor",
-    "release:major": "pnpm version major",
-    "postversion": "git push --follow-tags"
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@richhouse83/xsd-validator": "1.0.0",
