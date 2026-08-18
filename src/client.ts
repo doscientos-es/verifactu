@@ -103,6 +103,8 @@ export type VerifactuErrorCode =
 
 export type VerifactuSubmitResult = {
   status: "accepted" | "rejected" | "error";
+  /** Normalised AEAT per-record status when a SOAP response was received. */
+  aeatStatus: "correcto" | "aceptadoconerrores" | "incorrecto" | null;
   csv: string | null;
   hash: string;
   idfact: string;
@@ -112,6 +114,8 @@ export type VerifactuSubmitResult = {
   errorCode: VerifactuErrorCode | null;
   /** Raw AEAT `CodigoErrorRegistro` when the registry rejected the record. */
   aeatCode: string | null;
+  /** Non-blocking AEAT warnings, especially for `AceptadoConErrores`. */
+  warnings: Array<{ code: string | null; message: string }>;
 };
 
 function esc(s: string): string {
@@ -355,6 +359,7 @@ function parseSoapResponse(body: string): {
   valid: boolean;
   csv: string | null;
   status: "accepted" | "rejected";
+  aeatStatus: "correcto" | "aceptadoconerrores" | "incorrecto" | null;
   aeatCode: string | null;
   aeatDescription: string | null;
   soapFault: string | null;
@@ -372,6 +377,7 @@ function parseSoapResponse(body: string): {
       valid: false,
       csv: null,
       status: "rejected",
+      aeatStatus: null,
       aeatCode: null,
       aeatDescription: null,
       soapFault: null,
@@ -392,6 +398,7 @@ function parseSoapResponse(body: string): {
       valid: false,
       csv: null,
       status: "rejected",
+      aeatStatus: null,
       aeatCode: null,
       aeatDescription: null,
       soapFault: null,
@@ -435,7 +442,10 @@ function parseSoapResponse(body: string): {
       ? "accepted"
       : "rejected";
 
-  return { valid: true, csv, status, aeatCode, aeatDescription, soapFault, waitSeconds };
+  const aeatStatus = estadoRegistro === "correcto" || estadoRegistro === "aceptadoconerrores" || estadoRegistro === "incorrecto"
+    ? estadoRegistro
+    : null;
+  return { valid: true, csv, status, aeatStatus, aeatCode, aeatDescription, soapFault, waitSeconds };
 }
 
 function mockCsv(hash: string): string {
@@ -546,6 +556,7 @@ async function submitPayloadToVerifactu(
     );
     return {
       status: "error",
+      aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
@@ -553,6 +564,7 @@ async function submitPayloadToVerifactu(
       errorMessage: `XML mal formado: ${validation.message}`,
       errorCode: "xml_invalid",
       aeatCode: null,
+      warnings: [],
     };
   }
 
@@ -566,6 +578,7 @@ async function submitPayloadToVerifactu(
       );
       return {
         status: "error",
+        aeatStatus: null,
         csv: null,
         hash: payload.hash,
         idfact: payload.idfact,
@@ -573,6 +586,7 @@ async function submitPayloadToVerifactu(
         errorMessage: `XML no conforme al esquema AEAT: ${first?.message ?? "error desconocido"}`,
         errorCode: "xsd_invalid",
         aeatCode: null,
+        warnings: [],
       };
     }
   }
@@ -586,6 +600,7 @@ async function submitPayloadToVerifactu(
     );
     return {
       status: "accepted",
+      aeatStatus: null,
       csv,
       hash: payload.hash,
       idfact: payload.idfact,
@@ -593,6 +608,7 @@ async function submitPayloadToVerifactu(
       errorMessage: null,
       errorCode: null,
       aeatCode: null,
+      warnings: [],
     };
   }
 
@@ -601,6 +617,7 @@ async function submitPayloadToVerifactu(
     logger.error({ mode: config.environment }, "verifactu_cert_missing");
     return {
       status: "error",
+      aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
@@ -609,6 +626,7 @@ async function submitPayloadToVerifactu(
         "Certificado P12 no configurado (VERIFACTU_CERT_P12_BASE64 / VERIFACTU_CERT_PASSWORD)",
       errorCode: "cert_missing",
       aeatCode: null,
+      warnings: [],
     };
   }
 
@@ -619,6 +637,7 @@ async function submitPayloadToVerifactu(
     logger.error({ err }, "verifactu_cert_load_error");
     return {
       status: "error",
+      aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
@@ -626,6 +645,7 @@ async function submitPayloadToVerifactu(
       errorMessage: `Error cargando certificado: ${String(err)}`,
       errorCode: "cert_invalid",
       aeatCode: null,
+      warnings: [],
     };
   }
 
@@ -661,6 +681,7 @@ async function submitPayloadToVerifactu(
     const responseInvalid = /VERIFACTU_RESPONSE_TOO_LARGE/i.test(detail);
     return {
       status: "error",
+      aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
@@ -668,6 +689,7 @@ async function submitPayloadToVerifactu(
       errorMessage: `Error de conexión${certificateHint}: ${detail}`,
       errorCode: responseInvalid ? "response_invalid" : "network_error",
       aeatCode: null,
+      warnings: [],
     };
   }
 
@@ -681,6 +703,7 @@ async function submitPayloadToVerifactu(
     );
     return {
       status: "error",
+      aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
@@ -690,14 +713,16 @@ async function submitPayloadToVerifactu(
         : `AEAT HTTP ${httpStatus}`,
       errorCode: "http_error",
       aeatCode: null,
+      warnings: [],
     };
   }
 
-  const { valid, csv, status, aeatCode, aeatDescription, soapFault, waitSeconds } =
+  const { valid, csv, status, aeatStatus, aeatCode, aeatDescription, soapFault, waitSeconds } =
     parseSoapResponse(rawResponse);
   if (!valid) {
     return {
       status: "error",
+      aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
@@ -705,6 +730,7 @@ async function submitPayloadToVerifactu(
       errorMessage: "La respuesta de AEAT no contiene un SOAP de VERI*FACTU válido",
       errorCode: "response_invalid",
       aeatCode: null,
+      warnings: [],
     };
   }
   logger.info(
@@ -713,6 +739,7 @@ async function submitPayloadToVerifactu(
   );
   return {
     status,
+    aeatStatus,
     csv,
     hash: payload.hash,
     idfact: payload.idfact,
@@ -731,6 +758,10 @@ async function submitPayloadToVerifactu(
         : null,
     errorCode: status === "rejected" ? "aeat_rejected" : null,
     aeatCode: status === "rejected" ? aeatCode : null,
+    warnings:
+      status === "accepted" && aeatStatus === "aceptadoconerrores" && aeatDescription
+        ? [{ code: aeatCode, message: aeatDescription }]
+        : [],
   };
 }
 
@@ -745,6 +776,7 @@ export function submitToVerifactu(
   if (!fiscalValidation.valid) {
     return Promise.resolve({
       status: "error",
+      aeatStatus: null,
       csv: null,
       hash,
       idfact: buildIdfact(input.nif, input.invoiceNumber, input.issueDate),
@@ -752,6 +784,7 @@ export function submitToVerifactu(
       errorMessage: fiscalValidation.message,
       errorCode: "configuration_invalid",
       aeatCode: null,
+      warnings: [],
     });
   }
   return submitPayloadToVerifactu(
@@ -777,6 +810,7 @@ export function cancelInVerifactu(
   if (!fiscalValidation.valid) {
     return Promise.resolve({
       status: "error",
+      aeatStatus: null,
       csv: null,
       hash,
       idfact: buildIdfact(input.nif, input.cancelledInvoiceNumber, input.cancelledInvoiceIssueDate),
@@ -784,6 +818,7 @@ export function cancelInVerifactu(
       errorMessage: fiscalValidation.message,
       errorCode: "configuration_invalid",
       aeatCode: null,
+      warnings: [],
     });
   }
   return submitPayloadToVerifactu(

@@ -44,6 +44,7 @@
   },
   "scripts": {
     "build": "tsup && node scripts/copy-schemas.mjs",
+    "check:schemas": "node scripts/check-aeat-schemas.mjs",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
