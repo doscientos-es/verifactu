@@ -757,7 +757,9 @@ async function submitPayloadToVerifactu(
         ? (aeatDescription ?? soapFault ?? "AEAT rechazó el registro")
         : null,
     errorCode: status === "rejected" ? "aeat_rejected" : null,
-    aeatCode: status === "rejected" ? aeatCode : null,
+    // Preserve the code even for AceptadoConErrores; consumers need the
+    // warning identifier to decide whether an operational follow-up is needed.
+    aeatCode,
     warnings:
       status === "accepted" && aeatStatus === "aceptadoconerrores" && aeatDescription
         ? [{ code: aeatCode, message: aeatDescription }]
