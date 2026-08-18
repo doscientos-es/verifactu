@@ -691,7 +691,7 @@ async function submitPayloadToVerifactu(
   if (httpStatus >= 400) {
     // AEAT returns schema/validation errors as a SOAP Fault with HTTP 500;
     // the faultstring carries the actionable message (e.g. code 4102).
-    const { soapFault } = parseSoapResponse(rawResponse);
+    const { soapFault, aeatCode, aeatDescription, aeatStatus } = parseSoapResponse(rawResponse);
     logger.warn(
       { status: httpStatus, endpoint, soapFault },
       "verifactu_http_error",
@@ -702,12 +702,12 @@ async function submitPayloadToVerifactu(
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
-      response: { kind: "http_error", httpStatus, soapFault },
+      response: { kind: "http_error", httpStatus, soapFault, aeatCode, aeatDescription, aeatStatus },
       errorMessage: soapFault
         ? `AEAT HTTP ${httpStatus}: ${soapFault}`
         : `AEAT HTTP ${httpStatus}`,
       errorCode: "http_error",
-      aeatCode: null,
+      aeatCode,
       warnings: [],
     };
   }

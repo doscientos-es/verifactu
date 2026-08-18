@@ -49,16 +49,29 @@ function hasText(value: string | null | undefined): value is string {
 }
 
 function validReferences(refs: Array<{ invoiceNumber: string; issueDate: Date }> | undefined): boolean {
-  return !refs || refs.length <= 1000 && refs.every((ref) => hasText(ref.invoiceNumber) && validDate(ref.issueDate));
+  return (
+    refs === undefined ||
+    (Array.isArray(refs) &&
+      refs.length <= 1000 &&
+      refs.every(
+        (ref) =>
+          !!ref &&
+          typeof ref === "object" &&
+          hasText(ref.invoiceNumber) &&
+          validDate(ref.issueDate),
+      ))
+  );
 }
 
 function hasValidAmounts(lines: VatLine[], taxAmount: number, total: number): boolean {
   if (!Number.isFinite(taxAmount) || !Number.isFinite(total) || taxAmount < 0 || total < 0) {
     return false;
   }
-  if (lines.length === 0) return false;
+  if (!Array.isArray(lines) || lines.length === 0) return false;
   const taxFromLines = lines.reduce((sum, line) => {
     if (
+      !line ||
+      typeof line !== "object" ||
       !Number.isFinite(line.rate) ||
       !Number.isFinite(line.base) ||
       !Number.isFinite(line.tax) ||
@@ -86,7 +99,7 @@ export function validateVerifactuSubmission(
   input: VerifactuSubmitInput,
   software: VerifactuSoftware,
 ): FiscalValidationResult {
-  if (!hasText(input.nif) || !hasText(input.emisorName) || !hasText(input.invoiceNumber)) {
+  if (!input || typeof input !== "object" || !hasText(input.nif) || !hasText(input.emisorName) || !hasText(input.invoiceNumber)) {
     return { valid: false, message: "Faltan los datos identificativos de la factura" };
   }
   if (!validDate(input.issueDate) || !validDate(input.generatedAt)) {
@@ -99,6 +112,9 @@ export function validateVerifactuSubmission(
     return { valid: false, message: "El desglose de IVA no cuadra con los importes de la factura" };
   }
   const supportedTypes = new Set(["F1", "F2", "R1", "R2", "R3", "R4", "R5"]);
+  if (typeof input.invoiceType !== "string") {
+    return { valid: false, message: "El tipo de factura no es válido" };
+  }
   if (!supportedTypes.has(input.invoiceType)) {
     return {
       valid: false,
@@ -106,8 +122,23 @@ export function validateVerifactuSubmission(
     };
   }
   const rectificative = input.invoiceType.startsWith("R");
-  if (rectificative && !input.rectificationType) {
+  if (rectificative && input.rectificationType !== "S" && input.rectificationType !== "I") {
     return { valid: false, message: "Una factura rectificativa requiere TipoRectificativa" };
+  }
+  if (
+    input.rectificationAmounts &&
+    (!Number.isFinite(input.rectificationAmounts.base) ||
+      !Number.isFinite(input.rectificationAmounts.tax) ||
+      (input.rectificationAmounts.surcharge !== undefined &&
+        !Number.isFinite(input.rectificationAmounts.surcharge)))
+  ) {
+    return { valid: false, message: "Los importes de rectificación no son válidos" };
+  }
+  if (input.subsanacion !== undefined && input.subsanacion !== "S" && input.subsanacion !== "N") {
+    return { valid: false, message: "Subsanacion debe ser S o N" };
+  }
+  if (input.rechazoPrevio !== undefined && !["N", "S", "X"].includes(input.rechazoPrevio)) {
+    return { valid: false, message: "RechazoPrevio debe ser N, S o X" };
   }
   if (!rectificative && (input.rectificationType || input.rectifiedInvoices?.length || input.substitutedInvoices?.length || input.rectificationAmounts)) {
     return { valid: false, message: "Los datos de rectificación solo pueden usarse con una factura rectificativa" };
@@ -118,7 +149,12 @@ export function validateVerifactuSubmission(
   if (input.rechazoPrevio === "X" && input.subsanacion !== "S") {
     return { valid: false, message: "RechazoPrevio=X requiere Subsanacion=S" };
   }
-  if (input.externalReference !== undefined && (input.externalReference.trim().length === 0 || input.externalReference.length > 60)) {
+  if (
+    input.externalReference !== undefined &&
+    (typeof input.externalReference !== "string" ||
+      input.externalReference.trim().length === 0 ||
+      input.externalReference.length > 60)
+  ) {
     return { valid: false, message: "La referencia externa debe tener entre 1 y 60 caracteres" };
   }
   if (input.invoiceType === "F1" && (!hasText(input.clientNif) || !hasText(input.clientName))) {
@@ -152,6 +188,8 @@ export function validateVerifactuCancellation(
   software: VerifactuSoftware,
 ): FiscalValidationResult {
   if (
+    !input ||
+    typeof input !== "object" ||
     !hasText(input.nif) ||
     !hasText(input.emisorName) ||
     !hasText(input.cancelledInvoiceNumber) ||
@@ -159,6 +197,20 @@ export function validateVerifactuCancellation(
     !validDate(input.generatedAt)
   ) {
     return { valid: false, message: "Los datos de anulación no son válidos" };
+  }
+  if (input.sinRegistroPrevio !== undefined && !["S", "N"].includes(input.sinRegistroPrevio)) {
+    return { valid: false, message: "SinRegistroPrevio debe ser S o N" };
+  }
+  if (input.rechazoPrevio !== undefined && !["S", "N"].includes(input.rechazoPrevio)) {
+    return { valid: false, message: "RechazoPrevio debe ser S o N" };
+  }
+  if (
+    input.externalReference !== undefined &&
+    (typeof input.externalReference !== "string" ||
+      input.externalReference.trim().length === 0 ||
+      input.externalReference.length > 60)
+  ) {
+    return { valid: false, message: "La referencia externa debe tener entre 1 y 60 caracteres" };
   }
   const previousComplete =
     hasText(input.previousHash) &&
