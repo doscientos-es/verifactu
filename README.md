@@ -125,25 +125,14 @@ pnpm test       # vitest run
 
 ## Releases
 
-Las releases se gestionan con **Release Please** y Conventional Commits; no se
-ejecutan comandos manuales para subir la versión ni para crear tags.
-
-1. Abre un PR cuyo título siga el formato `feat(scope): descripción`,
-   `fix: descripción` o `perf: descripción`.
-2. Haz *squash merge* conservando el título del PR como mensaje del commit.
-3. Release Please crea o actualiza automáticamente un PR de release con la
-   versión y `CHANGELOG.md` calculados desde los commits convencionales.
-4. Al fusionar ese PR, crea el tag y GitHub Release, valida el paquete y lo
-   publica en npm mediante Trusted Publishing con procedencia verificable.
-
-`feat` aumenta la versión minor; `fix` y `perf`, patch; un `!` o footer
-`BREAKING CHANGE:` genera una major. `docs`, `test`, `ci`, `build`, `chore` y
-`refactor` no publican una versión por sí solos.
+Cada push directo a `main` valida el paquete, incrementa automáticamente la
+versión de parche, crea el commit y tag `vX.Y.Z`, y publica ese artefacto en npm
+con Trusted Publishing y provenance. No modifiques `version` manualmente.
 
 El trusted publisher de npm debe estar asociado al repositorio y al workflow
 `.github/workflows/publish.yml`; no se almacena un token de npm en GitHub.
-Proteged `main` para exigir CI y el check de título convencional, y permitid
-solo *squash merge* para que el título validado sea el commit que analiza Release Please.
+Proteged `main` para exigir CI. El commit de versión se realiza con
+`github-actions[bot]` y el workflow lo ignora para evitar un ciclo de publicación.
 
 ## License
 
