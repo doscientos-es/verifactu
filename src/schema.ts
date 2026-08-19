@@ -1,6 +1,6 @@
 import type { ValidationError } from "@richhouse83/xsd-validator";
-import * as xsdValidatorModule from "@richhouse83/xsd-validator";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 export type XsdValidationResult =
@@ -19,14 +19,26 @@ const suministroInformacion = readSchema("SuministroInformacion.xsd");
 const suministroLr = readSchema("SuministroLR.xsd");
 const xmldsig = readSchema("xmldsig-core-schema.xsd");
 const schemasBaseUrl = fileURLToPath(new URL("./schemas/", import.meta.url));
-const validateSchema = (((xsdValidatorModule as unknown as { default?: unknown }).default as { default?: unknown } | undefined)?.default ??
-  (xsdValidatorModule as unknown as { default?: unknown }).default ??
-  xsdValidatorModule) as (
-    xml: string,
-    xsdSchema: string,
-    xmlParserOptions?: { nonet?: boolean },
-    xsdParserOptions?: { baseUrl?: string; nonet?: boolean },
-  ) => true | ValidationError[];
+const require = createRequire(import.meta.url);
+
+type XsdValidator = (
+  xml: string,
+  xsdSchema: string,
+  xmlParserOptions?: { nonet?: boolean },
+  xsdParserOptions?: { baseUrl?: string; nonet?: boolean },
+) => true | ValidationError[];
+
+/**
+ * The XSD validator depends on libxmljs2, a native module. Loading it at the
+ * package entry point made QR-only and non-fiscal routes fail when the native
+ * binding is unavailable. Require it only at the XSD validation boundary.
+ */
+function loadXsdValidator(): XsdValidator {
+  const xsdValidatorModule = require("@richhouse83/xsd-validator") as { default?: unknown };
+  return ((xsdValidatorModule.default as { default?: unknown } | undefined)?.default ??
+    xsdValidatorModule.default ??
+    xsdValidatorModule) as XsdValidator;
+}
 
 /**
  * Validate a Veri*Factu submission against the schemas published by AEAT.
@@ -37,7 +49,7 @@ export function validateVerifactuXsd(xml: string): XsdValidationResult {
     return { valid: false, errors: [{ message: "XML vacío", line: null, column: null, code: null }] };
   }
   try {
-    const result = validateSchema(
+    const result = loadXsdValidator()(
       xml,
       suministroLr,
       { nonet: true },

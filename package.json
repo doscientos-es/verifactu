@@ -1,6 +1,6 @@
 {
   "name": "@doscientos/verifactu",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "Framework-agnostic Verifactu (AEAT) invoice submission, SIF hash chain and QR generation for Node.js.",
   "keywords": [
     "verifactu",
@@ -43,7 +43,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && node scripts/copy-schemas.mjs",
+    "build": "tsup && node scripts/copy-schemas.mjs && node scripts/verify-runtime-import.mjs",
     "check:schemas": "node scripts/check-aeat-schemas.mjs",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
