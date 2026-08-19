@@ -44,7 +44,8 @@ jobs:
         id: version
         run: |
           npm version patch --no-git-tag-version --ignore-scripts
-          echo "value=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          VERSION="$(node -p "require('./package.json').version")"
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Confirm main has not advanced
         run: |
           git fetch origin main
