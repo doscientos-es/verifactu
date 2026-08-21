@@ -9,8 +9,8 @@ import {
 } from "./hash";
 import { buildIdfact } from "./idfact";
 import { type VerifactuLogger, noopLogger } from "./logger";
-import { decodeP12Base64, loadP12Cert } from "./sign";
 import { validateVerifactuXsd } from "./schema";
+import { decodeP12Base64, loadP12Cert } from "./sign";
 import type { VerifactuConfig, VerifactuSoftware } from "./types";
 import {
   validateVerifactuCancellation,
@@ -228,9 +228,11 @@ export function buildVerifactuXml(
     `        <sf:FechaExpedicionFactura>${spanishDate(input.issueDate)}</sf:FechaExpedicionFactura>`,
     "      </sf:IDFactura>",
     input.externalReference ? `      <sf:RefExterna>${esc(input.externalReference.slice(0, 60))}</sf:RefExterna>` : null,
-    input.subsanacion === "S" ? "      <sf:Subsanacion>S</sf:Subsanacion>" : null,
-    input.rechazoPrevio ? `      <sf:RechazoPrevio>${input.rechazoPrevio}</sf:RechazoPrevio>` : null,
     `      <sf:NombreRazonEmisor>${esc(input.emisorName)}</sf:NombreRazonEmisor>`,
+    input.subsanacion === "S" ? "      <sf:Subsanacion>S</sf:Subsanacion>" : null,
+    input.rechazoPrevio && input.rechazoPrevio !== "N"
+      ? `      <sf:RechazoPrevio>${input.rechazoPrevio}</sf:RechazoPrevio>`
+      : null,
     `      <sf:TipoFactura>${esc(input.invoiceType)}</sf:TipoFactura>`,
     input.rectificationType ? `      <sf:TipoRectificativa>${input.rectificationType}</sf:TipoRectificativa>` : null,
     renderInvoiceReferences("FacturasRectificadas", input.rectifiedInvoices, input.nif),

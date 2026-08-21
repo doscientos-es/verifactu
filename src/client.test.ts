@@ -84,6 +84,25 @@ describe("verifactu/client", () => {
     expect(xml).toContain("<sf:Huella>GOLDENHASH</sf:Huella>");
   });
 
+  it("omits a normal prior-rejection flag and orders correction flags per the XSD", () => {
+    const normal = buildVerifactuXml({ ...baseInput, rechazoPrevio: "N" }, "HASH", mockSoftware);
+    expect(normal).not.toContain("<sf:RechazoPrevio>");
+    expect(validateVerifactuXsd(normal)).toEqual({ valid: true });
+
+    const corrected = buildVerifactuXml(
+      { ...baseInput, subsanacion: "S", rechazoPrevio: "X" },
+      "HASH",
+      mockSoftware,
+    );
+    expect(corrected.indexOf("<sf:NombreRazonEmisor>")).toBeLessThan(
+      corrected.indexOf("<sf:Subsanacion>"),
+    );
+    expect(corrected.indexOf("<sf:Subsanacion>")).toBeLessThan(
+      corrected.indexOf("<sf:RechazoPrevio>"),
+    );
+    expect(validateVerifactuXsd(corrected)).toEqual({ valid: true });
+  });
+
   it("buildVerifactuXml chains via RegistroAnterior when previousHash + prev invoice ID are set", () => {
     const xml = buildVerifactuXml(
       {

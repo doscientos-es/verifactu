@@ -19,9 +19,7 @@ export {
   submitToVerifactu
 } from "./client";
 export type {
-  VatLine,
-  InvoiceReference,
-  VerifactuCancellationInput,
+  InvoiceReference, VatLine, VerifactuCancellationInput,
   VerifactuErrorCode,
   VerifactuSubmitInput,
   VerifactuSubmitResult
@@ -69,5 +67,5 @@ export { validateVerifactuXsd } from "./schema";
 export type { XsdValidationResult } from "./schema";
 
 /** Runtime contract marker used by consuming applications during deployment. */
-export const VERIFACTU_PACKAGE_VERSION = "0.1.12" as const;
+export const VERIFACTU_PACKAGE_VERSION = "0.1.18" as const;
 
