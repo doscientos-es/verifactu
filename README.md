@@ -4,9 +4,9 @@ Framework-agnostic **Verifactu (AEAT)** toolkit for Node.js: billing-record
 registration (`RegistroAlta` and `RegistroAnulacion`), official AEAT XSD
 validation, the SIF SHA-256 hash chain, and tributary QR generation.
 
-- **Server-only.** Uses `node:crypto`, mutual-TLS and `node-forge`. Run it from
-  Next.js Server Actions / Route Handlers, a Node server, or a worker — **never
-  from a browser / React client component**.
+- **Server-first.** The root, `/durable` and `/nif` entry points use Node APIs.
+  Run them from Server Actions / Route Handlers or a Node server. The isolated
+  `/errors` entry point is browser-safe for operational UI.
 - **No env access.** Configuration is injected as plain data (`VerifactuConfig`),
   so the package is portable across apps. Each app keeps its own adapter that maps
   its env into a `VerifactuConfig` (see [`config.example.ts`](./config.example.ts)).
@@ -113,6 +113,10 @@ type VerifactuConfig = {
 | `validateSpanishFiscalIdentity(identity, certificate, options?)` | Read-only VNif census validation with official endpoint fallback. |
 | `getAeatErrorMetadata(code, detail?)` | Classify official AEAT errors by operational effect. |
 | `noopLogger` / `VerifactuLogger` | Optional logging port (pino-compatible). |
+
+Use `@doscientos/verifactu/errors` from browser bundles. Server integrations can
+use `@doscientos/verifactu`, `/durable` and `/nif` without pulling those modules
+into client code.
 
 Types: `VerifactuConfig`, `VerifactuCertificate`, `VerifactuSoftware`,
 `VerifactuEnvironment`, `VerifactuQrConfig`, `VerifactuSubmitInput`,

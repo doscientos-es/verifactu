@@ -40,6 +40,21 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./durable": {
+      "types": "./dist/durable.d.ts",
+      "import": "./dist/durable.js",
+      "require": "./dist/durable.cjs"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js",
+      "require": "./dist/errors.cjs"
+    },
+    "./nif": {
+      "types": "./dist/nif.d.ts",
+      "import": "./dist/nif.js",
+      "require": "./dist/nif.cjs"
     }
   },
   "scripts": {
