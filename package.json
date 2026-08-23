@@ -30,7 +30,9 @@
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs",
+    "config.example.ts"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

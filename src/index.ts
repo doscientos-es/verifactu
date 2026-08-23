@@ -82,6 +82,7 @@ export type {
   DurableVerifactuRecord,
   PreparedDurableVerifactuRecord
 } from "./durable";
+export { deliverDurableVerifactuRecord } from "./durable-client";
 
 // ── AEAT operational helpers ─────────────────────────────────────────────────
 export {
@@ -103,5 +104,5 @@ export type {
 } from "./nif-validation";
 
 /** Runtime contract marker used by consuming applications during deployment. */
-export const VERIFACTU_PACKAGE_VERSION = "0.1.20" as const;
+export const VERIFACTU_PACKAGE_VERSION = "0.1.21" as const;
 

@@ -24,6 +24,9 @@ pnpm add @doscientos/verifactu
 The recommended entry point is `createVerifactuClient`: bind a config once and
 reuse the returned client across requests.
 
+For a production ledger/outbox integration, follow the complete Spanish guide:
+[`docs/INTEGRATION.es.md`](./docs/INTEGRATION.es.md).
+
 ```ts
 import { createVerifactuClient } from "@doscientos/verifactu";
 import { verifactuConfigFromEnv } from "./verifactu-config"; // your adapter
@@ -109,6 +112,7 @@ type VerifactuConfig = {
 | `validateVerifactuXml(xml)` | XML well-formedness check. |
 | `validateVerifactuXsd(xml)` | Validation against the bundled AEAT `SuministroLR`/`SuministroInformacion` schemas. |
 | `prepareDurableVerifactuRecord(record, legacySoftware)` | Decode and verify an immutable Alta/Anulación ledger record before delivery. |
+| `deliverDurableVerifactuRecord(record, config, logger?)` | Verify and deliver one immutable Alta/Anulación with a single call. |
 | `isRetryableVerifactuDelivery(result)` | Storage-agnostic retry classification for AEAT delivery results. |
 | `validateSpanishFiscalIdentity(identity, certificate, options?)` | Read-only VNif census validation with official endpoint fallback. |
 | `getAeatErrorMetadata(code, detail?)` | Classify official AEAT errors by operational effect. |
