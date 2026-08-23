@@ -3,6 +3,7 @@ import {
   buildVerifactuCancellationXml,
   buildVerifactuXml,
   cancelInVerifactu,
+  parseSoapResponse,
   submitToVerifactu,
 } from "./client";
 import { createVerifactuClient } from "./index";
@@ -187,6 +188,45 @@ describe("verifactu/client", () => {
     expect(result.errorCode).toBeNull();
     expect(result.aeatCode).toBeNull();
     expect(result.response).toMatchObject({ mock: true });
+  });
+
+  it("treats a duplicate backed by a correct stored record as an accepted retry", () => {
+    const response = parseSoapResponse(`
+      <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+        <soapenv:Body><RespuestaRegFactuSistemaFacturacion>
+          <EstadoEnvio>Incorrecto</EstadoEnvio><RespuestaLinea>
+            <EstadoRegistro>Incorrecto</EstadoRegistro>
+            <CodigoErrorRegistro>3000</CodigoErrorRegistro>
+            <DescripcionErrorRegistro>Registro duplicado</DescripcionErrorRegistro>
+            <RegistroDuplicado><IdPeticionRegistroDuplicado>ABC</IdPeticionRegistroDuplicado>
+              <EstadoRegistroDuplicado>Correcta</EstadoRegistroDuplicado>
+            </RegistroDuplicado>
+          </RespuestaLinea>
+        </RespuestaRegFactuSistemaFacturacion></soapenv:Body>
+      </soapenv:Envelope>`);
+
+    expect(response).toMatchObject({
+      valid: true,
+      status: "accepted",
+      aeatStatus: "correcto",
+      aeatCode: "3000",
+      duplicateStatus: "correcta",
+    });
+  });
+
+  it("does not revive a duplicate whose stored record is annulled", () => {
+    const response = parseSoapResponse(`
+      <Envelope><Body><RespuestaRegFactuSistemaFacturacion>
+        <EstadoEnvio>Incorrecto</EstadoEnvio><RespuestaLinea>
+          <EstadoRegistro>Incorrecto</EstadoRegistro>
+          <RegistroDuplicado><IdPeticionRegistroDuplicado>ABC</IdPeticionRegistroDuplicado>
+            <EstadoRegistroDuplicado>Anulada</EstadoRegistroDuplicado>
+          </RegistroDuplicado>
+        </RespuestaLinea>
+      </RespuestaRegFactuSistemaFacturacion></Body></Envelope>`);
+
+    expect(response.status).toBe("rejected");
+    expect(response.duplicateStatus).toBe("anulada");
   });
 
   it("fails closed for an unsupported rectificative type", async () => {

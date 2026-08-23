@@ -352,13 +352,16 @@ function buildSoapEnvelope(innerXml: string): string {
 }
 
 /** Parse the AEAT SOAP response and extract CSV, status and any registry error. */
-function parseSoapResponse(body: string): {
+export function parseSoapResponse(body: string): {
   valid: boolean;
   csv: string | null;
   status: "accepted" | "rejected";
   aeatStatus: "correcto" | "aceptadoconerrores" | "incorrecto" | null;
   aeatCode: string | null;
   aeatDescription: string | null;
+  duplicateStatus: "correcta" | "aceptadoconerrores" | "anulada" | null;
+  duplicateCode: string | null;
+  duplicateDescription: string | null;
   soapFault: string | null;
   waitSeconds: number | null;
 } {
@@ -377,6 +380,9 @@ function parseSoapResponse(body: string): {
       aeatStatus: null,
       aeatCode: null,
       aeatDescription: null,
+      duplicateStatus: null,
+      duplicateCode: null,
+      duplicateDescription: null,
       soapFault: null,
       waitSeconds: null,
     };
@@ -398,6 +404,9 @@ function parseSoapResponse(body: string): {
       aeatStatus: null,
       aeatCode: null,
       aeatDescription: null,
+      duplicateStatus: null,
+      duplicateCode: null,
+      duplicateDescription: null,
       soapFault: null,
       waitSeconds: null,
     };
@@ -427,22 +436,58 @@ function parseSoapResponse(body: string): {
     firstLinea?.DescripcionErrorRegistro != null
       ? String(firstLinea.DescripcionErrorRegistro)
       : null;
+  const duplicate = firstLinea?.RegistroDuplicado as Record<string, unknown> | undefined;
+  const rawDuplicateStatus = String(duplicate?.EstadoRegistroDuplicado ?? "")
+    .trim()
+    .toLowerCase();
+  const duplicateStatus =
+    rawDuplicateStatus === "correcta" ||
+      rawDuplicateStatus === "aceptadoconerrores" ||
+      rawDuplicateStatus === "anulada"
+      ? rawDuplicateStatus
+      : null;
+  const duplicateCode =
+    duplicate?.CodigoErrorRegistro != null ? String(duplicate.CodigoErrorRegistro) : null;
+  const duplicateDescription =
+    duplicate?.DescripcionErrorRegistro != null
+      ? String(duplicate.DescripcionErrorRegistro)
+      : null;
 
   // The per-record EstadoRegistro is authoritative: "AceptadoConErrores" means
   // AEAT did register the record. Exact comparisons are required because
-  // "Incorrecto" and "ParcialmenteCorrecto" both contain "correcto".
-  const status = estadoRegistro
-    ? estadoRegistro === "correcto" || estadoRegistro === "aceptadoconerrores"
+  // "Incorrecto" and "ParcialmenteCorrecto" both contain "correcto". A
+  // duplicate whose stored record is Correcta/AceptadaConErrores is also a
+  // successful idempotent retry after a response may have been lost.
+  const effectiveStatus =
+    duplicateStatus === "correcta"
+      ? "correcto"
+      : duplicateStatus === "aceptadoconerrores"
+        ? "aceptadoconerrores"
+        : estadoRegistro;
+  const status = effectiveStatus
+    ? effectiveStatus === "correcto" || effectiveStatus === "aceptadoconerrores"
       ? "accepted"
       : "rejected"
     : estadoEnvio === "correcto"
       ? "accepted"
       : "rejected";
 
-  const aeatStatus = estadoRegistro === "correcto" || estadoRegistro === "aceptadoconerrores" || estadoRegistro === "incorrecto"
-    ? estadoRegistro
+  const aeatStatus = effectiveStatus === "correcto" || effectiveStatus === "aceptadoconerrores" || effectiveStatus === "incorrecto"
+    ? effectiveStatus
     : null;
-  return { valid: true, csv, status, aeatStatus, aeatCode, aeatDescription, soapFault, waitSeconds };
+  return {
+    valid: true,
+    csv,
+    status,
+    aeatStatus,
+    aeatCode,
+    aeatDescription,
+    duplicateStatus,
+    duplicateCode,
+    duplicateDescription,
+    soapFault,
+    waitSeconds,
+  };
 }
 
 function mockCsv(hash: string): string {
@@ -714,8 +759,19 @@ async function submitPayloadToVerifactu(
     };
   }
 
-  const { valid, csv, status, aeatStatus, aeatCode, aeatDescription, soapFault, waitSeconds } =
-    parseSoapResponse(rawResponse);
+  const {
+    valid,
+    csv,
+    status,
+    aeatStatus,
+    aeatCode,
+    aeatDescription,
+    duplicateStatus,
+    duplicateCode,
+    duplicateDescription,
+    soapFault,
+    waitSeconds,
+  } = parseSoapResponse(rawResponse);
   if (!valid) {
     return {
       status: "error",
@@ -746,6 +802,9 @@ async function submitPayloadToVerifactu(
       csv,
       aeatCode,
       aeatDescription,
+      duplicateStatus,
+      duplicateCode,
+      duplicateDescription,
       soapFault,
       waitSeconds,
     },
@@ -758,8 +817,15 @@ async function submitPayloadToVerifactu(
     // warning identifier to decide whether an operational follow-up is needed.
     aeatCode,
     warnings:
-      status === "accepted" && aeatStatus === "aceptadoconerrores" && aeatDescription
-        ? [{ code: aeatCode, message: aeatDescription }]
+      status === "accepted" &&
+        aeatStatus === "aceptadoconerrores" &&
+        (duplicateDescription ?? aeatDescription)
+        ? [
+          {
+            code: duplicateCode ?? aeatCode,
+            message: duplicateDescription ?? (aeatDescription as string),
+          },
+        ]
         : [],
   };
 }
