@@ -66,6 +66,42 @@ export type { FiscalValidationResult, XmlValidationResult } from "./validate";
 export { validateVerifactuXsd } from "./schema";
 export type { XsdValidationResult } from "./schema";
 
+// ── Durable ledger/outbox engine (storage agnostic) ───────────────────────────
+export {
+  formatVerifactuDeliveryError,
+  isRetryableVerifactuDelivery,
+  normalizeAltaRechazoPrevio,
+  parseDurableAltaPayload,
+  parseDurableCancellationPayload,
+  prepareDurableVerifactuRecord,
+  resolveVerifactuSoftwareSnapshot,
+  sanitizeVerifactuResponse,
+  verifactuWaitSeconds
+} from "./durable";
+export type {
+  DurableVerifactuRecord,
+  PreparedDurableVerifactuRecord
+} from "./durable";
+
+// ── AEAT operational helpers ─────────────────────────────────────────────────
+export {
+  AEAT_VERIFACTU_ERROR_CATALOG_URL,
+  extractAeatErrorCode,
+  getAeatErrorMetadata
+} from "./aeat-errors";
+export type { AeatErrorEffect, AeatErrorMetadata } from "./aeat-errors";
+export {
+  AEAT_NIF_ENDPOINTS,
+  buildAeatNifEnvelope,
+  interpretAeatNifResponse,
+  validateSpanishFiscalIdentity
+} from "./nif-validation";
+export type {
+  AeatFiscalIdentity,
+  AeatNifValidation,
+  AeatNifValidationOptions
+} from "./nif-validation";
+
 /** Runtime contract marker used by consuming applications during deployment. */
-export const VERIFACTU_PACKAGE_VERSION = "0.1.18" as const;
+export const VERIFACTU_PACKAGE_VERSION = "0.1.20" as const;
 

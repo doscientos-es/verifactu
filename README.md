@@ -108,12 +108,17 @@ type VerifactuConfig = {
 | `buildQrUrl(params, config)` / `buildQrDataUrl(url)` | QR helpers. |
 | `validateVerifactuXml(xml)` | XML well-formedness check. |
 | `validateVerifactuXsd(xml)` | Validation against the bundled AEAT `SuministroLR`/`SuministroInformacion` schemas. |
+| `prepareDurableVerifactuRecord(record, legacySoftware)` | Decode and verify an immutable Alta/Anulación ledger record before delivery. |
+| `isRetryableVerifactuDelivery(result)` | Storage-agnostic retry classification for AEAT delivery results. |
+| `validateSpanishFiscalIdentity(identity, certificate, options?)` | Read-only VNif census validation with official endpoint fallback. |
+| `getAeatErrorMetadata(code, detail?)` | Classify official AEAT errors by operational effect. |
 | `noopLogger` / `VerifactuLogger` | Optional logging port (pino-compatible). |
 
 Types: `VerifactuConfig`, `VerifactuCertificate`, `VerifactuSoftware`,
 `VerifactuEnvironment`, `VerifactuQrConfig`, `VerifactuSubmitInput`,
 `VerifactuSubmitResult`, `VerifactuErrorCode`, `VatLine`, `QrParams`,
-`XmlValidationResult`, `VerifactuClient`.
+`XmlValidationResult`, `VerifactuClient`, `DurableVerifactuRecord`,
+`PreparedDurableVerifactuRecord`, `AeatNifValidation`, `AeatErrorMetadata`.
 
 ## Scripts
 
