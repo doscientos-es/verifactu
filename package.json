@@ -66,7 +66,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "release:check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
     "@richhouse83/xsd-validator": "1.0.0",

@@ -1,5 +1,30 @@
-node_modules
-dist
+# Dependencies and package-manager caches
+node_modules/
+.npm/
+.pnpm-store/
+
+# Test and build output
+coverage/
+dist/
+.turbo/
+*.tgz
 *.tsbuildinfo
+storybook-static/
+
+# Local configuration and logs
+.env
+.env.*
+!.env.example
 *.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Operating-system and editor files
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
