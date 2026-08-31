@@ -7,18 +7,18 @@
  * `Logger` satisfies it out of the box. When no logger is passed, `noopLogger`
  * is used and the module emits nothing.
  */
-export type VerifactuLogFn = (obj: Record<string, unknown>, msg?: string) => void;
+export type VerifactuLogFn = (obj: Record<string, unknown>, msg?: string) => void
 
 export type VerifactuLogger = {
-  debug: VerifactuLogFn;
-  info: VerifactuLogFn;
-  warn: VerifactuLogFn;
-  error: VerifactuLogFn;
-};
+  debug: VerifactuLogFn
+  info: VerifactuLogFn
+  warn: VerifactuLogFn
+  error: VerifactuLogFn
+}
 
 export const noopLogger: VerifactuLogger = {
   debug: () => {},
   info: () => {},
   warn: () => {},
   error: () => {},
-};
+}

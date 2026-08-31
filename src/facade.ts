@@ -18,10 +18,10 @@ import {
   type VerifactuSubmitInput,
   type VerifactuSubmitResult,
   submitToVerifactu,
-} from "./client";
-import { type VerifactuLogger, noopLogger } from "./logger";
-import { type QrParams, buildQrDataUrl, buildQrUrl } from "./qr";
-import type { VerifactuConfig } from "./types";
+} from './client'
+import { type VerifactuLogger, noopLogger } from './logger'
+import { type QrParams, buildQrDataUrl, buildQrUrl } from './qr'
+import type { VerifactuConfig } from './types'
 
 /**
  * Stateless client bound to one {@link VerifactuConfig}. All methods are pure
@@ -34,19 +34,17 @@ export type VerifactuClient = {
    * entry, builds the payload, validates it, and submits it. Never throws:
    * failures are returned as a typed {@link VerifactuSubmitResult}.
    */
-  registerInvoice(input: VerifactuSubmitInput): Promise<VerifactuSubmitResult>;
+  registerInvoice(input: VerifactuSubmitInput): Promise<VerifactuSubmitResult>
   /**
    * Register (`RegistroAnulacion`) the cancellation of a previously generated
    * billing record. Never deletes or overwrites the original RegistroAlta.
    */
-  cancelInvoice(
-    input: VerifactuCancellationInput,
-  ): Promise<VerifactuSubmitResult>;
+  cancelInvoice(input: VerifactuCancellationInput): Promise<VerifactuSubmitResult>
   /** Build the tributary QR URL (AEAT cotejo endpoint, or the mock verify route). */
-  buildQrUrl(params: QrParams): string;
+  buildQrUrl(params: QrParams): string
   /** Convenience: build the QR URL and encode it as a PNG data URL in one step. */
-  buildQrDataUrl(params: QrParams): Promise<string>;
-};
+  buildQrDataUrl(params: QrParams): Promise<string>
+}
 
 /**
  * Create a {@link VerifactuClient} bound to `config`. Supply a logger to capture
@@ -61,5 +59,5 @@ export function createVerifactuClient(
     cancelInvoice: (input) => cancelInVerifactu(input, config, logger),
     buildQrUrl: (params) => buildQrUrl(params, config),
     buildQrDataUrl: (params) => buildQrDataUrl(buildQrUrl(params, config)),
-  };
+  }
 }

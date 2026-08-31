@@ -16,18 +16,20 @@ export {
   buildVerifactuCancellationXml,
   buildVerifactuXml,
   cancelInVerifactu,
-  submitToVerifactu
-} from "./client";
+  submitToVerifactu,
+} from './client'
 export type {
-  InvoiceReference, VatLine, VerifactuCancellationInput,
+  InvoiceReference,
+  VatLine,
+  VerifactuCancellationInput,
   VerifactuErrorCode,
   VerifactuSubmitInput,
-  VerifactuSubmitResult
-} from "./client";
+  VerifactuSubmitResult,
+} from './client'
 
 // ── High-level facade (recommended entry point) ──────────────────────────────
-export { createVerifactuClient } from "./facade";
-export type { VerifactuClient } from "./facade";
+export { createVerifactuClient } from './facade'
+export type { VerifactuClient } from './facade'
 
 // ── Hash-chain verification ───────────────────────────────────────────────────
 export {
@@ -35,16 +37,16 @@ export {
   buildHashPayload,
   computeCancellationHash,
   computeInvoiceHash,
-  spanishTimestamp
-} from "./hash";
-export type { CancellationHashInput, HashInput } from "./hash";
+  spanishTimestamp,
+} from './hash'
+export type { CancellationHashInput, HashInput } from './hash'
 
 // ── Logging port ─────────────────────────────────────────────────────────────
-export { noopLogger, type VerifactuLogger } from "./logger";
+export { noopLogger, type VerifactuLogger } from './logger'
 
 // ── QR generation ────────────────────────────────────────────────────────────
-export { buildQrDataUrl, buildQrUrl } from "./qr";
-export type { QrParams } from "./qr";
+export { buildQrDataUrl, buildQrUrl } from './qr'
+export type { QrParams } from './qr'
 
 // ── Configuration contract (inputs) ─────────────────────────────────────────
 export type {
@@ -52,19 +54,19 @@ export type {
   VerifactuConfig,
   VerifactuEnvironment,
   VerifactuQrConfig,
-  VerifactuSoftware
-} from "./types";
+  VerifactuSoftware,
+} from './types'
 
 // ── Local XML and fiscal validation ──────────────────────────────────────────
 export {
   validateVerifactuCancellation,
   validateVerifactuSubmission,
-  validateVerifactuXml
-} from "./validate";
-export type { FiscalValidationResult, XmlValidationResult } from "./validate";
+  validateVerifactuXml,
+} from './validate'
+export type { FiscalValidationResult, XmlValidationResult } from './validate'
 
-export { validateVerifactuXsd } from "./schema";
-export type { XsdValidationResult } from "./schema";
+export { validateVerifactuXsd } from './schema'
+export type { XsdValidationResult } from './schema'
 
 // ── Durable ledger/outbox engine (storage agnostic) ───────────────────────────
 export {
@@ -76,33 +78,29 @@ export {
   prepareDurableVerifactuRecord,
   resolveVerifactuSoftwareSnapshot,
   sanitizeVerifactuResponse,
-  verifactuWaitSeconds
-} from "./durable";
-export type {
-  DurableVerifactuRecord,
-  PreparedDurableVerifactuRecord
-} from "./durable";
-export { deliverDurableVerifactuRecord } from "./durable-client";
+  verifactuWaitSeconds,
+} from './durable'
+export type { DurableVerifactuRecord, PreparedDurableVerifactuRecord } from './durable'
+export { deliverDurableVerifactuRecord } from './durable-client'
 
 // ── AEAT operational helpers ─────────────────────────────────────────────────
 export {
   AEAT_VERIFACTU_ERROR_CATALOG_URL,
   extractAeatErrorCode,
-  getAeatErrorMetadata
-} from "./aeat-errors";
-export type { AeatErrorEffect, AeatErrorMetadata } from "./aeat-errors";
+  getAeatErrorMetadata,
+} from './aeat-errors'
+export type { AeatErrorEffect, AeatErrorMetadata } from './aeat-errors'
 export {
   AEAT_NIF_ENDPOINTS,
   buildAeatNifEnvelope,
   interpretAeatNifResponse,
-  validateSpanishFiscalIdentity
-} from "./nif-validation";
+  validateSpanishFiscalIdentity,
+} from './nif-validation'
 export type {
   AeatFiscalIdentity,
   AeatNifValidation,
-  AeatNifValidationOptions
-} from "./nif-validation";
+  AeatNifValidationOptions,
+} from './nif-validation'
 
 /** Runtime contract marker used by consuming applications during deployment. */
-export const VERIFACTU_PACKAGE_VERSION = "0.1.21" as const;
-
+export const VERIFACTU_PACKAGE_VERSION = '0.1.21' as const

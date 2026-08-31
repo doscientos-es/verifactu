@@ -1,82 +1,79 @@
-import { XMLParser } from "fast-xml-parser";
-import https from "node:https";
-import { AEAT_SOAP_ACTION_REG_FACTU, AEAT_SOAP_ENDPOINT } from "./constants";
-import {
-  computeCancellationHash,
-  computeInvoiceHash,
-  spanishDate,
-  spanishTimestamp,
-} from "./hash";
-import { buildIdfact } from "./idfact";
-import { type VerifactuLogger, noopLogger } from "./logger";
-import { validateVerifactuXsd } from "./schema";
-import { decodeP12Base64, loadP12Cert } from "./sign";
-import type { VerifactuConfig, VerifactuSoftware } from "./types";
+import https from 'node:https'
+
+import { XMLParser } from 'fast-xml-parser'
+
+import { AEAT_SOAP_ACTION_REG_FACTU, AEAT_SOAP_ENDPOINT } from './constants'
+import { computeCancellationHash, computeInvoiceHash, spanishDate, spanishTimestamp } from './hash'
+import { buildIdfact } from './idfact'
+import { type VerifactuLogger, noopLogger } from './logger'
+import { validateVerifactuXsd } from './schema'
+import { decodeP12Base64, loadP12Cert } from './sign'
+import type { VerifactuConfig, VerifactuSoftware } from './types'
 import {
   validateVerifactuCancellation,
   validateVerifactuSubmission,
   validateVerifactuXml,
-} from "./validate";
+} from './validate'
 
-export type VatLine = { rate: number; base: number; tax: number };
-export type InvoiceReference = { invoiceNumber: string; issueDate: Date };
+export type VatLine = { rate: number; base: number; tax: number }
+export type InvoiceReference = { invoiceNumber: string; issueDate: Date }
 
 export type VerifactuSubmitInput = {
-  nif: string;
-  invoiceNumber: string;
-  invoiceType: string;
+  nif: string
+  invoiceNumber: string
+  invoiceType: string
   /** Optional AEAT reference for idempotency/audit correlation. */
-  externalReference?: string;
+  externalReference?: string
   /** Required for rectificative invoices and optional for other correction flows. */
-  rectificationType?: "S" | "I";
-  rectifiedInvoices?: InvoiceReference[];
-  substitutedInvoices?: InvoiceReference[];
-  rectificationAmounts?: { base: number; tax: number; surcharge?: number };
-  operationDate?: Date;
+  rectificationType?: 'S' | 'I'
+  rectifiedInvoices?: InvoiceReference[]
+  substitutedInvoices?: InvoiceReference[]
+  rectificationAmounts?: { base: number; tax: number; surcharge?: number }
+  operationDate?: Date
   /** S for a correcting registration; N is omitted from the XML. */
-  subsanacion?: "S" | "N";
+  subsanacion?: 'S' | 'N'
   /** N, S or X according to the AEAT previous-rejection flow. */
-  rechazoPrevio?: "N" | "S" | "X";
-  issueDate: Date;
-  taxAmount: number;
-  total: number;
-  previousHash: string | null;
-  generatedAt: Date;
-  emisorName: string;
-  clientNif: string | null;
-  clientName: string | null;
-  descriptionOperacion: string;
-  vatLines: VatLine[];
+  rechazoPrevio?: 'N' | 'S' | 'X'
+  issueDate: Date
+  taxAmount: number
+  total: number
+  previousHash: string | null
+  generatedAt: Date
+  emisorName: string
+  clientNif: string | null
+  clientName: string | null
+  descriptionOperacion: string
+  vatLines: VatLine[]
   /** Required for Encadenamiento.RegistroAnterior (non-first invoices). */
-  previousInvoiceNumber: string | null;
-  previousIssueDate: Date | null;
+  previousInvoiceNumber: string | null
+  previousIssueDate: Date | null
   /** Set only when retrying after an AEAT or connectivity incident. */
-  incidence?: boolean;
-};
+  incidence?: boolean
+}
 
 /** Data needed to generate and submit a RegistroAnulacion. */
 export type VerifactuCancellationInput = {
   /** NIF of the issuer and of the invoice being annulled. */
-  nif: string;
+  nif: string
   /** Series and number of the invoice identified by the annulment. */
-  cancelledInvoiceNumber: string;
+  cancelledInvoiceNumber: string
   /** Issue date of the invoice identified by the annulment. */
-  cancelledInvoiceIssueDate: Date;
+  cancelledInvoiceIssueDate: Date
   /** Hash of the immediately preceding record in this SIF chain. */
-  previousHash: string | null;
-  generatedAt: Date;
-  emisorName: string;
+  previousHash: string | null
+  generatedAt: Date
+  emisorName: string
   /** Required with previousHash for Encadenamiento.RegistroAnterior. */
-  previousInvoiceNumber: string | null;
-  previousIssueDate: Date | null;
+  previousInvoiceNumber: string | null
+  previousIssueDate: Date | null
   /** Whether the annulled registration is absent from AEAT (defaults to N). */
-  sinRegistroPrevio?: "S" | "N";
+  sinRegistroPrevio?: 'S' | 'N'
   /** Whether AEAT previously rejected this annulment (defaults to N). */
-  rechazoPrevio?: "S" | "N";
-  externalReference?: string;
+  rechazoPrevio?: 'S' | 'N'
+  externalReference?: string
   /** Set only when retrying after an AEAT or connectivity incident. */
-  incidence?: boolean;
-};
+  incidence?: boolean
+}
 
 /**
  * Stable, typed classification of why a submission did not succeed. Consumers
@@ -92,54 +89,58 @@ export type VerifactuCancellationInput = {
  *  - `aeat_rejected` → AEAT parsed the request but rejected the record
  */
 export type VerifactuErrorCode =
-  | "cert_missing"
-  | "cert_invalid"
-  | "xml_invalid"
-  | "xsd_invalid"
-  | "configuration_invalid"
-  | "network_error"
-  | "http_error"
-  | "response_invalid"
-  | "aeat_rejected";
+  | 'cert_missing'
+  | 'cert_invalid'
+  | 'xml_invalid'
+  | 'xsd_invalid'
+  | 'configuration_invalid'
+  | 'network_error'
+  | 'http_error'
+  | 'response_invalid'
+  | 'aeat_rejected'
 
 export type VerifactuSubmitResult = {
-  status: "accepted" | "rejected" | "error";
+  status: 'accepted' | 'rejected' | 'error'
   /** Normalised AEAT per-record status when a SOAP response was received. */
-  aeatStatus: "correcto" | "aceptadoconerrores" | "incorrecto" | null;
-  csv: string | null;
-  hash: string;
-  idfact: string;
-  response: Record<string, unknown>;
-  errorMessage: string | null;
+  aeatStatus: 'correcto' | 'aceptadoconerrores' | 'incorrecto' | null
+  csv: string | null
+  hash: string
+  idfact: string
+  response: Record<string, unknown>
+  errorMessage: string | null
   /** Typed error category for programmatic handling; `null` when accepted. */
-  errorCode: VerifactuErrorCode | null;
+  errorCode: VerifactuErrorCode | null
   /** Raw AEAT `CodigoErrorRegistro` when the registry rejected the record. */
-  aeatCode: string | null;
+  aeatCode: string | null
   /** Non-blocking AEAT warnings, especially for `AceptadoConErrores`. */
-  warnings: Array<{ code: string | null; message: string }>;
-};
+  warnings: Array<{ code: string | null; message: string }>
+}
 
 function esc(s: string): string {
   return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
-function renderInvoiceReferences(tag: string, refs: InvoiceReference[] | undefined, nif: string): string | null {
-  if (!refs?.length) return null;
+function renderInvoiceReferences(
+  tag: string,
+  refs: InvoiceReference[] | undefined,
+  nif: string,
+): string | null {
+  if (!refs?.length) return null
   return [
     `      <sf:${tag}>`,
     ...refs.flatMap((ref) => [
-      `        <sf:${tag === "FacturasRectificadas" ? "IDFacturaRectificada" : "IDFacturaSustituida"}>`,
+      `        <sf:${tag === 'FacturasRectificadas' ? 'IDFacturaRectificada' : 'IDFacturaSustituida'}>`,
       `          <sf:IDEmisorFactura>${esc(nif)}</sf:IDEmisorFactura>`,
       `          <sf:NumSerieFactura>${esc(ref.invoiceNumber)}</sf:NumSerieFactura>`,
       `          <sf:FechaExpedicionFactura>${spanishDate(ref.issueDate)}</sf:FechaExpedicionFactura>`,
-      `        </sf:${tag === "FacturasRectificadas" ? "IDFacturaRectificada" : "IDFacturaSustituida"}>`,
+      `        </sf:${tag === 'FacturasRectificadas' ? 'IDFacturaRectificada' : 'IDFacturaSustituida'}>`,
     ]),
     `      </sf:${tag}>`,
-  ].join("\n");
+  ].join('\n')
 }
 
 /**
@@ -158,9 +159,9 @@ export function buildVerifactuXml(
   software: VerifactuSoftware,
 ): string {
   const SUM_LR =
-    "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd";
+    'https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd'
   const SUM =
-    "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd";
+    'https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd'
 
   // Encadenamiento: first invoice → PrimerRegistro; subsequent → full previous ID.
   // RegistroAnterior is an EncadenamientoFacturaAnteriorType: its children are
@@ -169,114 +170,123 @@ export function buildVerifactuXml(
   const encadenamiento =
     input.previousHash && input.previousInvoiceNumber && input.previousIssueDate
       ? [
-        "      <sf:Encadenamiento>",
-        "        <sf:RegistroAnterior>",
-        `          <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
-        `          <sf:NumSerieFactura>${esc(input.previousInvoiceNumber)}</sf:NumSerieFactura>`,
-        `          <sf:FechaExpedicionFactura>${spanishDate(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
-        `          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
-        "        </sf:RegistroAnterior>",
-        "      </sf:Encadenamiento>",
-      ].join("\n")
-      : "      <sf:Encadenamiento><sf:PrimerRegistro>S</sf:PrimerRegistro></sf:Encadenamiento>";
+          '      <sf:Encadenamiento>',
+          '        <sf:RegistroAnterior>',
+          `          <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
+          `          <sf:NumSerieFactura>${esc(input.previousInvoiceNumber)}</sf:NumSerieFactura>`,
+          `          <sf:FechaExpedicionFactura>${spanishDate(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
+          `          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
+          '        </sf:RegistroAnterior>',
+          '      </sf:Encadenamiento>',
+        ].join('\n')
+      : '      <sf:Encadenamiento><sf:PrimerRegistro>S</sf:PrimerRegistro></sf:Encadenamiento>'
 
   // Destinatarios: required for F1 (full invoice) when client NIF is known
   const destinatarios =
-    input.invoiceType === "F1" && input.clientNif
+    input.invoiceType === 'F1' && input.clientNif
       ? [
-        "      <sf:Destinatarios>",
-        "        <sf:IDDestinatario>",
-        `          <sf:NombreRazon>${esc(input.clientName ?? "")}</sf:NombreRazon>`,
-        `          <sf:NIF>${esc(input.clientNif)}</sf:NIF>`,
-        "        </sf:IDDestinatario>",
-        "      </sf:Destinatarios>",
-      ].join("\n")
-      : null;
+          '      <sf:Destinatarios>',
+          '        <sf:IDDestinatario>',
+          `          <sf:NombreRazon>${esc(input.clientName ?? '')}</sf:NombreRazon>`,
+          `          <sf:NIF>${esc(input.clientNif)}</sf:NIF>`,
+          '        </sf:IDDestinatario>',
+          '      </sf:Destinatarios>',
+        ].join('\n')
+      : null
 
   // Desglose: one DetalleDesglose per distinct VAT rate
   const desgloseLines = input.vatLines
     .map((l) =>
       [
-        "        <sf:DetalleDesglose>",
-        "          <sf:ClaveRegimen>01</sf:ClaveRegimen>",
-        "          <sf:CalificacionOperacion>S1</sf:CalificacionOperacion>",
+        '        <sf:DetalleDesglose>',
+        '          <sf:ClaveRegimen>01</sf:ClaveRegimen>',
+        '          <sf:CalificacionOperacion>S1</sf:CalificacionOperacion>',
         `          <sf:TipoImpositivo>${l.rate.toFixed(2)}</sf:TipoImpositivo>`,
         `          <sf:BaseImponibleOimporteNoSujeto>${l.base.toFixed(2)}</sf:BaseImponibleOimporteNoSujeto>`,
         `          <sf:CuotaRepercutida>${l.tax.toFixed(2)}</sf:CuotaRepercutida>`,
-        "        </sf:DetalleDesglose>",
-      ].join("\n"),
+        '        </sf:DetalleDesglose>',
+      ].join('\n'),
     )
-    .join("\n");
+    .join('\n')
 
   return [
     `<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="${SUM_LR}" xmlns:sf="${SUM}">`,
-    "  <sfLR:Cabecera>",
-    "    <sf:ObligadoEmision>",
+    '  <sfLR:Cabecera>',
+    '    <sf:ObligadoEmision>',
     `      <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
     `      <sf:NIF>${esc(input.nif)}</sf:NIF>`,
-    "    </sf:ObligadoEmision>",
+    '    </sf:ObligadoEmision>',
     input.incidence
-      ? "    <sf:RemisionVoluntaria><sf:Incidencia>S</sf:Incidencia></sf:RemisionVoluntaria>"
+      ? '    <sf:RemisionVoluntaria><sf:Incidencia>S</sf:Incidencia></sf:RemisionVoluntaria>'
       : null,
-    "  </sfLR:Cabecera>",
-    "  <sfLR:RegistroFactura>",
-    "    <sf:RegistroAlta>",
-    "      <sf:IDVersion>1.0</sf:IDVersion>",
-    "      <sf:IDFactura>",
+    '  </sfLR:Cabecera>',
+    '  <sfLR:RegistroFactura>',
+    '    <sf:RegistroAlta>',
+    '      <sf:IDVersion>1.0</sf:IDVersion>',
+    '      <sf:IDFactura>',
     `        <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
     `        <sf:NumSerieFactura>${esc(input.invoiceNumber)}</sf:NumSerieFactura>`,
     `        <sf:FechaExpedicionFactura>${spanishDate(input.issueDate)}</sf:FechaExpedicionFactura>`,
-    "      </sf:IDFactura>",
-    input.externalReference ? `      <sf:RefExterna>${esc(input.externalReference.slice(0, 60))}</sf:RefExterna>` : null,
+    '      </sf:IDFactura>',
+    input.externalReference
+      ? `      <sf:RefExterna>${esc(input.externalReference.slice(0, 60))}</sf:RefExterna>`
+      : null,
     `      <sf:NombreRazonEmisor>${esc(input.emisorName)}</sf:NombreRazonEmisor>`,
-    input.subsanacion === "S" ? "      <sf:Subsanacion>S</sf:Subsanacion>" : null,
-    input.rechazoPrevio && input.rechazoPrevio !== "N"
+    input.subsanacion === 'S' ? '      <sf:Subsanacion>S</sf:Subsanacion>' : null,
+    input.rechazoPrevio && input.rechazoPrevio !== 'N'
       ? `      <sf:RechazoPrevio>${input.rechazoPrevio}</sf:RechazoPrevio>`
       : null,
     `      <sf:TipoFactura>${esc(input.invoiceType)}</sf:TipoFactura>`,
-    input.rectificationType ? `      <sf:TipoRectificativa>${input.rectificationType}</sf:TipoRectificativa>` : null,
-    renderInvoiceReferences("FacturasRectificadas", input.rectifiedInvoices, input.nif),
-    renderInvoiceReferences("FacturasSustituidas", input.substitutedInvoices, input.nif),
+    input.rectificationType
+      ? `      <sf:TipoRectificativa>${input.rectificationType}</sf:TipoRectificativa>`
+      : null,
+    renderInvoiceReferences('FacturasRectificadas', input.rectifiedInvoices, input.nif),
+    renderInvoiceReferences('FacturasSustituidas', input.substitutedInvoices, input.nif),
     input.rectificationAmounts
       ? [
-        "      <sf:ImporteRectificacion>",
-        `        <sf:BaseRectificada>${input.rectificationAmounts.base.toFixed(2)}</sf:BaseRectificada>`,
-        `        <sf:CuotaRectificada>${input.rectificationAmounts.tax.toFixed(2)}</sf:CuotaRectificada>`,
-        input.rectificationAmounts.surcharge == null
-          ? null
-          : `        <sf:CuotaRecargoRectificado>${input.rectificationAmounts.surcharge.toFixed(2)}</sf:CuotaRecargoRectificado>`,
-        "      </sf:ImporteRectificacion>",
-      ].filter((line) => line !== null).join("\n")
+          '      <sf:ImporteRectificacion>',
+          `        <sf:BaseRectificada>${input.rectificationAmounts.base.toFixed(2)}</sf:BaseRectificada>`,
+          `        <sf:CuotaRectificada>${input.rectificationAmounts.tax.toFixed(2)}</sf:CuotaRectificada>`,
+          input.rectificationAmounts.surcharge === undefined ||
+          input.rectificationAmounts.surcharge === null
+            ? null
+            : `        <sf:CuotaRecargoRectificado>${input.rectificationAmounts.surcharge.toFixed(2)}</sf:CuotaRecargoRectificado>`,
+          '      </sf:ImporteRectificacion>',
+        ]
+          .filter((line) => line !== null)
+          .join('\n')
       : null,
-    input.operationDate ? `      <sf:FechaOperacion>${spanishDate(input.operationDate)}</sf:FechaOperacion>` : null,
+    input.operationDate
+      ? `      <sf:FechaOperacion>${spanishDate(input.operationDate)}</sf:FechaOperacion>`
+      : null,
     `      <sf:DescripcionOperacion>${esc(input.descriptionOperacion.slice(0, 250))}</sf:DescripcionOperacion>`,
     destinatarios,
-    "      <sf:Desglose>",
+    '      <sf:Desglose>',
     desgloseLines,
-    "      </sf:Desglose>",
+    '      </sf:Desglose>',
     `      <sf:CuotaTotal>${input.taxAmount.toFixed(2)}</sf:CuotaTotal>`,
     `      <sf:ImporteTotal>${input.total.toFixed(2)}</sf:ImporteTotal>`,
     encadenamiento,
-    "      <sf:SistemaInformatico>",
+    '      <sf:SistemaInformatico>',
     `        <sf:NombreRazon>${esc(software.producerName)}</sf:NombreRazon>`,
     `        <sf:NIF>${esc(software.producerNif)}</sf:NIF>`,
     `        <sf:NombreSistemaInformatico>${esc(software.name)}</sf:NombreSistemaInformatico>`,
     `        <sf:IdSistemaInformatico>${esc(software.id)}</sf:IdSistemaInformatico>`,
     `        <sf:Version>${esc(software.version)}</sf:Version>`,
     `        <sf:NumeroInstalacion>${esc(software.installationNumber)}</sf:NumeroInstalacion>`,
-    `        <sf:TipoUsoPosibleSoloVerifactu>${software.onlyVerifactu ? "S" : "N"}</sf:TipoUsoPosibleSoloVerifactu>`,
-    `        <sf:TipoUsoPosibleMultiOT>${software.multipleTaxpayers ? "S" : "N"}</sf:TipoUsoPosibleMultiOT>`,
-    `        <sf:IndicadorMultiplesOT>${software.multipleTaxpayers ? "S" : "N"}</sf:IndicadorMultiplesOT>`,
-    "      </sf:SistemaInformatico>",
+    `        <sf:TipoUsoPosibleSoloVerifactu>${software.onlyVerifactu ? 'S' : 'N'}</sf:TipoUsoPosibleSoloVerifactu>`,
+    `        <sf:TipoUsoPosibleMultiOT>${software.multipleTaxpayers ? 'S' : 'N'}</sf:TipoUsoPosibleMultiOT>`,
+    `        <sf:IndicadorMultiplesOT>${software.multipleTaxpayers ? 'S' : 'N'}</sf:IndicadorMultiplesOT>`,
+    '      </sf:SistemaInformatico>',
     `      <sf:FechaHoraHusoGenRegistro>${spanishTimestamp(input.generatedAt)}</sf:FechaHoraHusoGenRegistro>`,
-    "      <sf:TipoHuella>01</sf:TipoHuella>",
+    '      <sf:TipoHuella>01</sf:TipoHuella>',
     `      <sf:Huella>${esc(hash)}</sf:Huella>`,
-    "    </sf:RegistroAlta>",
-    "  </sfLR:RegistroFactura>",
-    "</sfLR:RegFactuSistemaFacturacion>",
+    '    </sf:RegistroAlta>',
+    '  </sfLR:RegistroFactura>',
+    '</sfLR:RegFactuSistemaFacturacion>',
   ]
     .filter((l) => l !== null)
-    .join("\n");
+    .join('\n')
 }
 
 /** Build a RegistroAnulacion payload per Anexo I/II, HAC/1177/2024. */
@@ -286,97 +296,99 @@ export function buildVerifactuCancellationXml(
   software: VerifactuSoftware,
 ): string {
   const SUM_LR =
-    "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd";
+    'https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd'
   const SUM =
-    "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd";
+    'https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd'
   const encadenamiento =
     input.previousHash && input.previousInvoiceNumber && input.previousIssueDate
       ? [
-        "      <sf:Encadenamiento>",
-        "        <sf:RegistroAnterior>",
-        `          <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
-        `          <sf:NumSerieFactura>${esc(input.previousInvoiceNumber)}</sf:NumSerieFactura>`,
-        `          <sf:FechaExpedicionFactura>${spanishDate(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
-        `          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
-        "        </sf:RegistroAnterior>",
-        "      </sf:Encadenamiento>",
-      ].join("\n")
-      : "      <sf:Encadenamiento><sf:PrimerRegistro>S</sf:PrimerRegistro></sf:Encadenamiento>";
+          '      <sf:Encadenamiento>',
+          '        <sf:RegistroAnterior>',
+          `          <sf:IDEmisorFactura>${esc(input.nif)}</sf:IDEmisorFactura>`,
+          `          <sf:NumSerieFactura>${esc(input.previousInvoiceNumber)}</sf:NumSerieFactura>`,
+          `          <sf:FechaExpedicionFactura>${spanishDate(input.previousIssueDate)}</sf:FechaExpedicionFactura>`,
+          `          <sf:Huella>${esc(input.previousHash)}</sf:Huella>`,
+          '        </sf:RegistroAnterior>',
+          '      </sf:Encadenamiento>',
+        ].join('\n')
+      : '      <sf:Encadenamiento><sf:PrimerRegistro>S</sf:PrimerRegistro></sf:Encadenamiento>'
 
   return [
     `<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="${SUM_LR}" xmlns:sf="${SUM}">`,
-    "  <sfLR:Cabecera>",
-    "    <sf:ObligadoEmision>",
+    '  <sfLR:Cabecera>',
+    '    <sf:ObligadoEmision>',
     `      <sf:NombreRazon>${esc(input.emisorName)}</sf:NombreRazon>`,
     `      <sf:NIF>${esc(input.nif)}</sf:NIF>`,
-    "    </sf:ObligadoEmision>",
+    '    </sf:ObligadoEmision>',
     input.incidence
-      ? "    <sf:RemisionVoluntaria><sf:Incidencia>S</sf:Incidencia></sf:RemisionVoluntaria>"
+      ? '    <sf:RemisionVoluntaria><sf:Incidencia>S</sf:Incidencia></sf:RemisionVoluntaria>'
       : null,
-    "  </sfLR:Cabecera>",
-    "  <sfLR:RegistroFactura>",
-    "    <sf:RegistroAnulacion>",
-    "      <sf:IDVersion>1.0</sf:IDVersion>",
-    "      <sf:IDFactura>",
+    '  </sfLR:Cabecera>',
+    '  <sfLR:RegistroFactura>',
+    '    <sf:RegistroAnulacion>',
+    '      <sf:IDVersion>1.0</sf:IDVersion>',
+    '      <sf:IDFactura>',
     `        <sf:IDEmisorFacturaAnulada>${esc(input.nif)}</sf:IDEmisorFacturaAnulada>`,
     `        <sf:NumSerieFacturaAnulada>${esc(input.cancelledInvoiceNumber)}</sf:NumSerieFacturaAnulada>`,
     `        <sf:FechaExpedicionFacturaAnulada>${spanishDate(input.cancelledInvoiceIssueDate)}</sf:FechaExpedicionFacturaAnulada>`,
-    "      </sf:IDFactura>",
-    input.externalReference ? `      <sf:RefExterna>${esc(input.externalReference.slice(0, 60))}</sf:RefExterna>` : null,
-    `      <sf:SinRegistroPrevio>${input.sinRegistroPrevio ?? "N"}</sf:SinRegistroPrevio>`,
-    `      <sf:RechazoPrevio>${input.rechazoPrevio ?? "N"}</sf:RechazoPrevio>`,
+    '      </sf:IDFactura>',
+    input.externalReference
+      ? `      <sf:RefExterna>${esc(input.externalReference.slice(0, 60))}</sf:RefExterna>`
+      : null,
+    `      <sf:SinRegistroPrevio>${input.sinRegistroPrevio ?? 'N'}</sf:SinRegistroPrevio>`,
+    `      <sf:RechazoPrevio>${input.rechazoPrevio ?? 'N'}</sf:RechazoPrevio>`,
     encadenamiento,
-    "      <sf:SistemaInformatico>",
+    '      <sf:SistemaInformatico>',
     `        <sf:NombreRazon>${esc(software.producerName)}</sf:NombreRazon>`,
     `        <sf:NIF>${esc(software.producerNif)}</sf:NIF>`,
     `        <sf:NombreSistemaInformatico>${esc(software.name)}</sf:NombreSistemaInformatico>`,
     `        <sf:IdSistemaInformatico>${esc(software.id)}</sf:IdSistemaInformatico>`,
     `        <sf:Version>${esc(software.version)}</sf:Version>`,
     `        <sf:NumeroInstalacion>${esc(software.installationNumber)}</sf:NumeroInstalacion>`,
-    `        <sf:TipoUsoPosibleSoloVerifactu>${software.onlyVerifactu ? "S" : "N"}</sf:TipoUsoPosibleSoloVerifactu>`,
-    `        <sf:TipoUsoPosibleMultiOT>${software.multipleTaxpayers ? "S" : "N"}</sf:TipoUsoPosibleMultiOT>`,
-    `        <sf:IndicadorMultiplesOT>${software.multipleTaxpayers ? "S" : "N"}</sf:IndicadorMultiplesOT>`,
-    "      </sf:SistemaInformatico>",
+    `        <sf:TipoUsoPosibleSoloVerifactu>${software.onlyVerifactu ? 'S' : 'N'}</sf:TipoUsoPosibleSoloVerifactu>`,
+    `        <sf:TipoUsoPosibleMultiOT>${software.multipleTaxpayers ? 'S' : 'N'}</sf:TipoUsoPosibleMultiOT>`,
+    `        <sf:IndicadorMultiplesOT>${software.multipleTaxpayers ? 'S' : 'N'}</sf:IndicadorMultiplesOT>`,
+    '      </sf:SistemaInformatico>',
     `      <sf:FechaHoraHusoGenRegistro>${spanishTimestamp(input.generatedAt)}</sf:FechaHoraHusoGenRegistro>`,
-    "      <sf:TipoHuella>01</sf:TipoHuella>",
+    '      <sf:TipoHuella>01</sf:TipoHuella>',
     `      <sf:Huella>${esc(hash)}</sf:Huella>`,
-    "    </sf:RegistroAnulacion>",
-    "  </sfLR:RegistroFactura>",
-    "</sfLR:RegFactuSistemaFacturacion>",
-  ].join("\n");
+    '    </sf:RegistroAnulacion>',
+    '  </sfLR:RegistroFactura>',
+    '</sfLR:RegFactuSistemaFacturacion>',
+  ].join('\n')
 }
 
 /** Wrap the (signed) registration document in a SOAP 1.1 envelope. */
 function buildSoapEnvelope(innerXml: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Header/><soapenv:Body>${innerXml}</soapenv:Body></soapenv:Envelope>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Header/><soapenv:Body>${innerXml}</soapenv:Body></soapenv:Envelope>`
 }
 
 /** Parse the AEAT SOAP response and extract CSV, status and any registry error. */
 export function parseSoapResponse(body: string): {
-  valid: boolean;
-  csv: string | null;
-  status: "accepted" | "rejected";
-  aeatStatus: "correcto" | "aceptadoconerrores" | "incorrecto" | null;
-  aeatCode: string | null;
-  aeatDescription: string | null;
-  duplicateStatus: "correcta" | "aceptadoconerrores" | "anulada" | null;
-  duplicateCode: string | null;
-  duplicateDescription: string | null;
-  soapFault: string | null;
-  waitSeconds: number | null;
+  valid: boolean
+  csv: string | null
+  status: 'accepted' | 'rejected'
+  aeatStatus: 'correcto' | 'aceptadoconerrores' | 'incorrecto' | null
+  aeatCode: string | null
+  aeatDescription: string | null
+  duplicateStatus: 'correcta' | 'aceptadoconerrores' | 'anulada' | null
+  duplicateCode: string | null
+  duplicateDescription: string | null
+  soapFault: string | null
+  waitSeconds: number | null
 } {
   const parser = new XMLParser({
     ignoreAttributes: false,
     removeNSPrefix: true,
-  });
-  let obj: Record<string, unknown>;
+  })
+  let obj: Record<string, unknown>
   try {
-    obj = parser.parse(body) as Record<string, unknown>;
+    obj = parser.parse(body) as Record<string, unknown>
   } catch {
     return {
       valid: false,
       csv: null,
-      status: "rejected",
+      status: 'rejected',
       aeatStatus: null,
       aeatCode: null,
       aeatDescription: null,
@@ -385,22 +397,20 @@ export function parseSoapResponse(body: string): {
       duplicateDescription: null,
       soapFault: null,
       waitSeconds: null,
-    };
+    }
   }
   // Traverse: Envelope > Body > RespuestaRegFactuSistemaFacturacion
-  const envelope = obj.Envelope as Record<string, unknown> | undefined;
-  const soapBody = envelope?.Body as Record<string, unknown> | undefined;
-  const resp = soapBody?.RespuestaRegFactuSistemaFacturacion as
-    | Record<string, unknown>
-    | undefined;
-  const fault = soapBody?.Fault as Record<string, unknown> | undefined;
-  const soapFault = fault?.faultstring ? String(fault.faultstring) : null;
+  const envelope = obj.Envelope as Record<string, unknown> | undefined
+  const soapBody = envelope?.Body as Record<string, unknown> | undefined
+  const resp = soapBody?.RespuestaRegFactuSistemaFacturacion as Record<string, unknown> | undefined
+  const fault = soapBody?.Fault as Record<string, unknown> | undefined
+  const soapFault = fault?.faultstring ? String(fault.faultstring) : null
 
   if (!resp && !soapFault) {
     return {
       valid: false,
       csv: null,
-      status: "rejected",
+      status: 'rejected',
       aeatStatus: null,
       aeatCode: null,
       aeatDescription: null,
@@ -409,49 +419,52 @@ export function parseSoapResponse(body: string): {
       duplicateDescription: null,
       soapFault: null,
       waitSeconds: null,
-    };
+    }
   }
 
-  const estadoEnvio = String(resp?.EstadoEnvio ?? "")
+  const estadoEnvio = String(resp?.EstadoEnvio ?? '')
     .trim()
-    .toLowerCase();
-  const csv = resp?.CSV ? String(resp.CSV) : null;
-  const waitCandidate = Number(resp?.TiempoEsperaEnvio);
-  const waitSeconds = Number.isInteger(waitCandidate) && waitCandidate >= 0 ? waitCandidate : null;
+    .toLowerCase()
+  const csv = resp?.CSV ? String(resp.CSV) : null
+  const waitCandidate = Number(resp?.TiempoEsperaEnvio)
+  const waitSeconds = Number.isInteger(waitCandidate) && waitCandidate >= 0 ? waitCandidate : null
 
   // Per-record registry state/errors: AEAT returns one RespuestaLinea per
   // record, which fast-xml-parser yields as a single object or an array.
-  const lineas = resp?.RespuestaLinea;
+  const lineas = resp?.RespuestaLinea
   const firstLinea = (Array.isArray(lineas) ? lineas[0] : lineas) as
     | Record<string, unknown>
-    | undefined;
-  const estadoRegistro = String(firstLinea?.EstadoRegistro ?? "")
+    | undefined
+  const estadoRegistro = String(firstLinea?.EstadoRegistro ?? '')
     .trim()
-    .toLowerCase();
+    .toLowerCase()
   const aeatCode =
-    firstLinea?.CodigoErrorRegistro != null
+    firstLinea?.CodigoErrorRegistro !== undefined && firstLinea.CodigoErrorRegistro !== null
       ? String(firstLinea.CodigoErrorRegistro)
-      : null;
+      : null
   const aeatDescription =
-    firstLinea?.DescripcionErrorRegistro != null
+    firstLinea?.DescripcionErrorRegistro !== undefined &&
+    firstLinea.DescripcionErrorRegistro !== null
       ? String(firstLinea.DescripcionErrorRegistro)
-      : null;
-  const duplicate = firstLinea?.RegistroDuplicado as Record<string, unknown> | undefined;
-  const rawDuplicateStatus = String(duplicate?.EstadoRegistroDuplicado ?? "")
+      : null
+  const duplicate = firstLinea?.RegistroDuplicado as Record<string, unknown> | undefined
+  const rawDuplicateStatus = String(duplicate?.EstadoRegistroDuplicado ?? '')
     .trim()
-    .toLowerCase();
+    .toLowerCase()
   const duplicateStatus =
-    rawDuplicateStatus === "correcta" ||
-      rawDuplicateStatus === "aceptadoconerrores" ||
-      rawDuplicateStatus === "anulada"
+    rawDuplicateStatus === 'correcta' ||
+    rawDuplicateStatus === 'aceptadoconerrores' ||
+    rawDuplicateStatus === 'anulada'
       ? rawDuplicateStatus
-      : null;
+      : null
   const duplicateCode =
-    duplicate?.CodigoErrorRegistro != null ? String(duplicate.CodigoErrorRegistro) : null;
+    duplicate?.CodigoErrorRegistro !== undefined && duplicate.CodigoErrorRegistro !== null
+      ? String(duplicate.CodigoErrorRegistro)
+      : null
   const duplicateDescription =
-    duplicate?.DescripcionErrorRegistro != null
+    duplicate?.DescripcionErrorRegistro !== undefined && duplicate.DescripcionErrorRegistro !== null
       ? String(duplicate.DescripcionErrorRegistro)
-      : null;
+      : null
 
   // The per-record EstadoRegistro is authoritative: "AceptadoConErrores" means
   // AEAT did register the record. Exact comparisons are required because
@@ -459,22 +472,25 @@ export function parseSoapResponse(body: string): {
   // duplicate whose stored record is Correcta/AceptadaConErrores is also a
   // successful idempotent retry after a response may have been lost.
   const effectiveStatus =
-    duplicateStatus === "correcta"
-      ? "correcto"
-      : duplicateStatus === "aceptadoconerrores"
-        ? "aceptadoconerrores"
-        : estadoRegistro;
+    duplicateStatus === 'correcta'
+      ? 'correcto'
+      : duplicateStatus === 'aceptadoconerrores'
+        ? 'aceptadoconerrores'
+        : estadoRegistro
   const status = effectiveStatus
-    ? effectiveStatus === "correcto" || effectiveStatus === "aceptadoconerrores"
-      ? "accepted"
-      : "rejected"
-    : estadoEnvio === "correcto"
-      ? "accepted"
-      : "rejected";
+    ? effectiveStatus === 'correcto' || effectiveStatus === 'aceptadoconerrores'
+      ? 'accepted'
+      : 'rejected'
+    : estadoEnvio === 'correcto'
+      ? 'accepted'
+      : 'rejected'
 
-  const aeatStatus = effectiveStatus === "correcto" || effectiveStatus === "aceptadoconerrores" || effectiveStatus === "incorrecto"
-    ? effectiveStatus
-    : null;
+  const aeatStatus =
+    effectiveStatus === 'correcto' ||
+    effectiveStatus === 'aceptadoconerrores' ||
+    effectiveStatus === 'incorrecto'
+      ? effectiveStatus
+      : null
   return {
     valid: true,
     csv,
@@ -487,11 +503,11 @@ export function parseSoapResponse(body: string): {
     duplicateDescription,
     soapFault,
     waitSeconds,
-  };
+  }
 }
 
 function mockCsv(hash: string): string {
-  return hash.slice(0, 16).toUpperCase();
+  return hash.slice(0, 16).toUpperCase()
 }
 
 /**
@@ -508,17 +524,17 @@ async function soapPost(
   maxResponseBytes: number,
 ): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
-    const u = new URL(endpoint);
-    const bodyBuf = Buffer.from(body, "utf8");
+    const u = new URL(endpoint)
+    const bodyBuf = Buffer.from(body, 'utf8')
     const req = https.request(
       {
         hostname: u.hostname,
         port: u.port ? Number(u.port) : 443,
         path: u.pathname + u.search,
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "text/xml; charset=utf-8",
-          "Content-Length": bodyBuf.length,
+          'Content-Type': 'text/xml; charset=utf-8',
+          'Content-Length': bodyBuf.length,
           SOAPAction: soapAction,
         },
         pfx: pfxBuf,
@@ -527,37 +543,37 @@ async function soapPost(
         timeout: timeoutMs,
       },
       (res) => {
-        const chunks: Buffer[] = [];
-        let bytes = 0;
-        res.on("data", (c: Buffer) => {
-          bytes += c.length;
+        const chunks: Buffer[] = []
+        let bytes = 0
+        res.on('data', (c: Buffer) => {
+          bytes += c.length
           if (bytes > maxResponseBytes) {
-            req.destroy(new Error("VERIFACTU_RESPONSE_TOO_LARGE"));
-            return;
+            req.destroy(new Error('VERIFACTU_RESPONSE_TOO_LARGE'))
+            return
           }
-          chunks.push(c);
-        });
-        res.on("end", () =>
+          chunks.push(c)
+        })
+        res.on('end', () =>
           resolve({
             status: res.statusCode ?? 0,
-            text: Buffer.concat(chunks).toString("utf8"),
+            text: Buffer.concat(chunks).toString('utf8'),
           }),
-        );
+        )
       },
-    );
-    req.on("error", reject);
-    req.on("timeout", () => req.destroy(new Error("VERIFACTU_REQUEST_TIMEOUT")));
-    req.write(bodyBuf);
-    req.end();
-  });
+    )
+    req.on('error', reject)
+    req.on('timeout', () => req.destroy(new Error('VERIFACTU_REQUEST_TIMEOUT')))
+    req.write(bodyBuf)
+    req.end()
+  })
 }
 
 type SubmissionPayload = {
-  reference: string;
-  hash: string;
-  idfact: string;
-  xml: string;
-};
+  reference: string
+  hash: string
+  idfact: string
+  xml: string
+}
 
 /**
  * Sends a prepared billing record to Verifactu. Dispatches by `VERIFACTU_ENV`:
@@ -581,12 +597,12 @@ async function submitPayloadToVerifactu(
       idfact: payload.idfact,
       xmlBytes: payload.xml.length,
     },
-    "verifactu_submit_start",
-  );
+    'verifactu_submit_start',
+  )
 
   // ── Well-formedness gate ──────────────────────────────────────────────────
   // Never ship a malformed payload (even in mock/CI): catches builder breakage.
-  const validation = validateVerifactuXml(payload.xml);
+  const validation = validateVerifactuXml(payload.xml)
   if (!validation.valid) {
     logger.error(
       {
@@ -594,54 +610,51 @@ async function submitPayloadToVerifactu(
         reason: validation.message,
         line: validation.line,
       },
-      "verifactu_xml_invalid",
-    );
+      'verifactu_xml_invalid',
+    )
     return {
-      status: "error",
+      status: 'error',
       aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
-      response: { error: "malformed XML", detail: validation.message },
+      response: { error: 'malformed XML', detail: validation.message },
       errorMessage: `XML mal formado: ${validation.message}`,
-      errorCode: "xml_invalid",
+      errorCode: 'xml_invalid',
       aeatCode: null,
       warnings: [],
-    };
+    }
   }
 
   if (config.validateAgainstXsd !== false) {
-    const xsdValidation = validateVerifactuXsd(payload.xml);
+    const xsdValidation = validateVerifactuXsd(payload.xml)
     if (!xsdValidation.valid) {
-      const first = xsdValidation.errors[0];
+      const first = xsdValidation.errors[0]
       logger.error(
         { record: payload.reference, reason: first?.message, line: first?.line },
-        "verifactu_xsd_invalid",
-      );
+        'verifactu_xsd_invalid',
+      )
       return {
-        status: "error",
+        status: 'error',
         aeatStatus: null,
         csv: null,
         hash: payload.hash,
         idfact: payload.idfact,
-        response: { error: "XSD validation failed", errors: xsdValidation.errors },
-        errorMessage: `XML no conforme al esquema AEAT: ${first?.message ?? "error desconocido"}`,
-        errorCode: "xsd_invalid",
+        response: { error: 'XSD validation failed', errors: xsdValidation.errors },
+        errorMessage: `XML no conforme al esquema AEAT: ${first?.message ?? 'error desconocido'}`,
+        errorCode: 'xsd_invalid',
         aeatCode: null,
         warnings: [],
-      };
+      }
     }
   }
 
   // ── Mock mode ────────────────────────────────────────────────────────────
-  if (config.environment === "mock") {
-    const csv = mockCsv(payload.hash);
-    logger.info(
-      { record: payload.reference, csv },
-      "verifactu_submit_mock_ok",
-    );
+  if (config.environment === 'mock') {
+    const csv = mockCsv(payload.hash)
+    logger.info({ record: payload.reference, csv }, 'verifactu_submit_mock_ok')
     return {
-      status: "accepted",
+      status: 'accepted',
       aeatStatus: null,
       csv,
       hash: payload.hash,
@@ -651,55 +664,55 @@ async function submitPayloadToVerifactu(
       errorCode: null,
       aeatCode: null,
       warnings: [],
-    };
+    }
   }
 
   // ── Real SOAP submission (test / prod) ────────────────────────────────────
   if (!config.certificate.p12Base64 || !config.certificate.password) {
-    logger.error({ mode: config.environment }, "verifactu_cert_missing");
+    logger.error({ mode: config.environment }, 'verifactu_cert_missing')
     return {
-      status: "error",
+      status: 'error',
       aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
-      response: { kind: "certificate_missing" },
+      response: { kind: 'certificate_missing' },
       errorMessage:
-        "Certificado P12 no configurado (VERIFACTU_CERT_P12_BASE64 / VERIFACTU_CERT_PASSWORD)",
-      errorCode: "cert_missing",
+        'Certificado P12 no configurado (VERIFACTU_CERT_P12_BASE64 / VERIFACTU_CERT_PASSWORD)',
+      errorCode: 'cert_missing',
       aeatCode: null,
       warnings: [],
-    };
+    }
   }
 
   // Validate cert + password before making any network call
   try {
-    loadP12Cert(config.certificate.p12Base64, config.certificate.password);
+    loadP12Cert(config.certificate.p12Base64, config.certificate.password)
   } catch (err) {
-    logger.error({ err }, "verifactu_cert_load_error");
+    logger.error({ err }, 'verifactu_cert_load_error')
     return {
-      status: "error",
+      status: 'error',
       aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
-      response: { kind: "certificate_error" },
+      response: { kind: 'certificate_error' },
       errorMessage: `Error cargando certificado: ${String(err)}`,
-      errorCode: "cert_invalid",
+      errorCode: 'cert_invalid',
       aeatCode: null,
       warnings: [],
-    };
+    }
   }
 
   // Use the same strict decoder as the preflight check. Buffer.from(...)
   // silently discards invalid Base64 characters, which can turn a damaged
   // environment variable into a different/truncated certificate at TLS time.
-  const pfxBuf = decodeP12Base64(config.certificate.p12Base64);
-  const soapBody = buildSoapEnvelope(payload.xml);
-  const endpoint = AEAT_SOAP_ENDPOINT[config.environment];
+  const pfxBuf = decodeP12Base64(config.certificate.p12Base64)
+  const soapBody = buildSoapEnvelope(payload.xml)
+  const endpoint = AEAT_SOAP_ENDPOINT[config.environment]
 
-  let rawResponse: string;
-  let httpStatus: number;
+  let rawResponse: string
+  let httpStatus: number
   try {
     const res = await soapPost(
       endpoint,
@@ -709,54 +722,56 @@ async function submitPayloadToVerifactu(
       config.certificate.password,
       Math.max(1_000, config.requestTimeoutMs ?? 30_000),
       Math.max(1_024, config.maxResponseBytes ?? 1_048_576),
-    );
-    rawResponse = res.text;
-    httpStatus = res.status;
+    )
+    rawResponse = res.text
+    httpStatus = res.status
   } catch (err) {
-    logger.error({ err, endpoint }, "verifactu_network_error");
-    const detail = String(err);
+    logger.error({ err, endpoint }, 'verifactu_network_error')
+    const detail = String(err)
     const certificateHint = /asn(?:\.1|1)|pfx|pkcs.?12|certificate|certificado|tls|openssl/i.test(
       detail,
     )
-      ? " (revisar VERIFACTU_CERT_P12_BASE64, contraseña y certificado cliente)"
-      : "";
-    const responseInvalid = /VERIFACTU_RESPONSE_TOO_LARGE/i.test(detail);
+      ? ' (revisar VERIFACTU_CERT_P12_BASE64, contraseña y certificado cliente)'
+      : ''
+    const responseInvalid = /VERIFACTU_RESPONSE_TOO_LARGE/i.test(detail)
     return {
-      status: "error",
+      status: 'error',
       aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
-      response: { kind: responseInvalid ? "response_too_large" : "network_error" },
+      response: { kind: responseInvalid ? 'response_too_large' : 'network_error' },
       errorMessage: `Error de conexión${certificateHint}: ${detail}`,
-      errorCode: responseInvalid ? "response_invalid" : "network_error",
+      errorCode: responseInvalid ? 'response_invalid' : 'network_error',
       aeatCode: null,
       warnings: [],
-    };
+    }
   }
 
   if (httpStatus >= 400) {
     // AEAT returns schema/validation errors as a SOAP Fault with HTTP 500;
     // the faultstring carries the actionable message (e.g. code 4102).
-    const { soapFault, aeatCode, aeatDescription, aeatStatus } = parseSoapResponse(rawResponse);
-    logger.warn(
-      { status: httpStatus, endpoint, soapFault },
-      "verifactu_http_error",
-    );
+    const { soapFault, aeatCode, aeatDescription, aeatStatus } = parseSoapResponse(rawResponse)
+    logger.warn({ status: httpStatus, endpoint, soapFault }, 'verifactu_http_error')
     return {
-      status: "error",
+      status: 'error',
       aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
-      response: { kind: "http_error", httpStatus, soapFault, aeatCode, aeatDescription, aeatStatus },
-      errorMessage: soapFault
-        ? `AEAT HTTP ${httpStatus}: ${soapFault}`
-        : `AEAT HTTP ${httpStatus}`,
-      errorCode: "http_error",
+      response: {
+        kind: 'http_error',
+        httpStatus,
+        soapFault,
+        aeatCode,
+        aeatDescription,
+        aeatStatus,
+      },
+      errorMessage: soapFault ? `AEAT HTTP ${httpStatus}: ${soapFault}` : `AEAT HTTP ${httpStatus}`,
+      errorCode: 'http_error',
       aeatCode,
       warnings: [],
-    };
+    }
   }
 
   const {
@@ -771,25 +786,22 @@ async function submitPayloadToVerifactu(
     duplicateDescription,
     soapFault,
     waitSeconds,
-  } = parseSoapResponse(rawResponse);
+  } = parseSoapResponse(rawResponse)
   if (!valid) {
     return {
-      status: "error",
+      status: 'error',
       aeatStatus: null,
       csv: null,
       hash: payload.hash,
       idfact: payload.idfact,
-      response: { kind: "response_invalid", httpStatus },
-      errorMessage: "La respuesta de AEAT no contiene un SOAP de VERI*FACTU válido",
-      errorCode: "response_invalid",
+      response: { kind: 'response_invalid', httpStatus },
+      errorMessage: 'La respuesta de AEAT no contiene un SOAP de VERI*FACTU válido',
+      errorCode: 'response_invalid',
       aeatCode: null,
       warnings: [],
-    };
+    }
   }
-  logger.info(
-    { record: payload.reference, csv, status, aeatCode },
-    "verifactu_submit_ok",
-  );
+  logger.info({ record: payload.reference, csv, status, aeatCode }, 'verifactu_submit_ok')
   return {
     status,
     aeatStatus,
@@ -797,7 +809,7 @@ async function submitPayloadToVerifactu(
     hash: payload.hash,
     idfact: payload.idfact,
     response: {
-      kind: "aeat_response",
+      kind: 'aeat_response',
       httpStatus,
       csv,
       aeatCode,
@@ -809,25 +821,23 @@ async function submitPayloadToVerifactu(
       waitSeconds,
     },
     errorMessage:
-      status === "rejected"
-        ? (aeatDescription ?? soapFault ?? "AEAT rechazó el registro")
-        : null,
-    errorCode: status === "rejected" ? "aeat_rejected" : null,
+      status === 'rejected' ? (aeatDescription ?? soapFault ?? 'AEAT rechazó el registro') : null,
+    errorCode: status === 'rejected' ? 'aeat_rejected' : null,
     // Preserve the code even for AceptadoConErrores; consumers need the
     // warning identifier to decide whether an operational follow-up is needed.
     aeatCode,
     warnings:
-      status === "accepted" &&
-        aeatStatus === "aceptadoconerrores" &&
-        (duplicateDescription ?? aeatDescription)
+      status === 'accepted' &&
+      aeatStatus === 'aceptadoconerrores' &&
+      (duplicateDescription ?? aeatDescription)
         ? [
-          {
-            code: duplicateCode ?? aeatCode,
-            message: duplicateDescription ?? (aeatDescription as string),
-          },
-        ]
+            {
+              code: duplicateCode ?? aeatCode,
+              message: duplicateDescription ?? (aeatDescription as string),
+            },
+          ]
         : [],
-  };
+  }
 }
 
 /** Submit a RegistroAlta invoice record to AEAT. Never throws. */
@@ -836,21 +846,21 @@ export function submitToVerifactu(
   config: VerifactuConfig,
   logger: VerifactuLogger = noopLogger,
 ): Promise<VerifactuSubmitResult> {
-  const fiscalValidation = validateVerifactuSubmission(input, config.software);
-  const hash = computeInvoiceHash(input);
+  const fiscalValidation = validateVerifactuSubmission(input, config.software)
+  const hash = computeInvoiceHash(input)
   if (!fiscalValidation.valid) {
     return Promise.resolve({
-      status: "error",
+      status: 'error',
       aeatStatus: null,
       csv: null,
       hash,
       idfact: buildIdfact(input.nif, input.invoiceNumber, input.issueDate),
-      response: { kind: "configuration_invalid" },
+      response: { kind: 'configuration_invalid' },
       errorMessage: fiscalValidation.message,
-      errorCode: "configuration_invalid",
+      errorCode: 'configuration_invalid',
       aeatCode: null,
       warnings: [],
-    });
+    })
   }
   return submitPayloadToVerifactu(
     {
@@ -861,7 +871,7 @@ export function submitToVerifactu(
     },
     config,
     logger,
-  );
+  )
 }
 
 /** Submit a RegistroAnulacion record to AEAT. Never throws. */
@@ -870,34 +880,30 @@ export function cancelInVerifactu(
   config: VerifactuConfig,
   logger: VerifactuLogger = noopLogger,
 ): Promise<VerifactuSubmitResult> {
-  const fiscalValidation = validateVerifactuCancellation(input, config.software);
-  const hash = computeCancellationHash(input);
+  const fiscalValidation = validateVerifactuCancellation(input, config.software)
+  const hash = computeCancellationHash(input)
   if (!fiscalValidation.valid) {
     return Promise.resolve({
-      status: "error",
+      status: 'error',
       aeatStatus: null,
       csv: null,
       hash,
       idfact: buildIdfact(input.nif, input.cancelledInvoiceNumber, input.cancelledInvoiceIssueDate),
-      response: { kind: "configuration_invalid" },
+      response: { kind: 'configuration_invalid' },
       errorMessage: fiscalValidation.message,
-      errorCode: "configuration_invalid",
+      errorCode: 'configuration_invalid',
       aeatCode: null,
       warnings: [],
-    });
+    })
   }
   return submitPayloadToVerifactu(
     {
       reference: input.cancelledInvoiceNumber,
       hash,
-      idfact: buildIdfact(
-        input.nif,
-        input.cancelledInvoiceNumber,
-        input.cancelledInvoiceIssueDate,
-      ),
+      idfact: buildIdfact(input.nif, input.cancelledInvoiceNumber, input.cancelledInvoiceIssueDate),
       xml: buildVerifactuCancellationXml(input, hash, config.software),
     },
     config,
     logger,
-  );
+  )
 }

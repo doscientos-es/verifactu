@@ -12,14 +12,15 @@
  * zero extra dependency cost (`fast-xml-parser` is already used to parse the
  * SOAP response).
  */
-import { XMLValidator } from "fast-xml-parser";
-import type { VatLine, VerifactuCancellationInput, VerifactuSubmitInput } from "./client";
-import type { VerifactuSoftware } from "./types";
+import { XMLValidator } from 'fast-xml-parser'
+
+import type { VatLine, VerifactuCancellationInput, VerifactuSubmitInput } from './client'
+import type { VerifactuSoftware } from './types'
 
 /** Outcome of {@link validateVerifactuXml}. Never thrown — always returned. */
 export type XmlValidationResult =
   | { valid: true }
-  | { valid: false; message: string; line?: number; column?: number };
+  | { valid: false; message: string; line?: number; column?: number }
 
 /**
  * Validate that `xml` is well-formed. Pure and side-effect free; safe to call
@@ -27,28 +28,30 @@ export type XmlValidationResult =
  * callers can map failures to a typed error without try/catch.
  */
 export function validateVerifactuXml(xml: string): XmlValidationResult {
-  const result = XMLValidator.validate(xml);
-  if (result === true) return { valid: true };
-  const err = result.err;
+  const result = XMLValidator.validate(xml)
+  if (result === true) return { valid: true }
+  const err = result.err
   return {
     valid: false,
-    message: err?.msg ?? "malformed XML",
+    message: err?.msg ?? 'malformed XML',
     line: err?.line,
     column: err?.col,
-  };
+  }
 }
 
-export type FiscalValidationResult = { valid: true } | { valid: false; message: string };
+export type FiscalValidationResult = { valid: true } | { valid: false; message: string }
 
 function validDate(value: Date): boolean {
-  return value instanceof Date && Number.isFinite(value.getTime());
+  return value instanceof Date && Number.isFinite(value.getTime())
 }
 
 function hasText(value: string | null | undefined): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+  return typeof value === 'string' && value.trim().length > 0
 }
 
-function validReferences(refs: Array<{ invoiceNumber: string; issueDate: Date }> | undefined): boolean {
+function validReferences(
+  refs: Array<{ invoiceNumber: string; issueDate: Date }> | undefined,
+): boolean {
   return (
     refs === undefined ||
     (Array.isArray(refs) &&
@@ -56,41 +59,41 @@ function validReferences(refs: Array<{ invoiceNumber: string; issueDate: Date }>
       refs.every(
         (ref) =>
           !!ref &&
-          typeof ref === "object" &&
+          typeof ref === 'object' &&
           hasText(ref.invoiceNumber) &&
           validDate(ref.issueDate),
       ))
-  );
+  )
 }
 
 function hasValidAmounts(lines: VatLine[], taxAmount: number, total: number): boolean {
   if (!Number.isFinite(taxAmount) || !Number.isFinite(total) || taxAmount < 0 || total < 0) {
-    return false;
+    return false
   }
-  if (!Array.isArray(lines) || lines.length === 0) return false;
+  if (!Array.isArray(lines) || lines.length === 0) return false
   const taxFromLines = lines.reduce((sum, line) => {
     if (
       !line ||
-      typeof line !== "object" ||
+      typeof line !== 'object' ||
       !Number.isFinite(line.rate) ||
       !Number.isFinite(line.base) ||
       !Number.isFinite(line.tax) ||
       line.base < 0 ||
       line.tax < 0
     ) {
-      return Number.NaN;
+      return Number.NaN
     }
-    return sum + line.tax;
-  }, 0);
+    return sum + line.tax
+  }, 0)
   const baseFromLines = lines.reduce(
     (sum, line) => sum + (Number.isFinite(line?.base) ? line.base : Number.NaN),
     0,
-  );
+  )
   return (
     Number.isFinite(taxFromLines) &&
     Math.abs(taxFromLines - taxAmount) < 0.005 &&
     Math.abs(baseFromLines + taxAmount - total) < 0.005
-  );
+  )
 }
 
 /**
@@ -102,31 +105,37 @@ export function validateVerifactuSubmission(
   input: VerifactuSubmitInput,
   software: VerifactuSoftware,
 ): FiscalValidationResult {
-  if (!input || typeof input !== "object" || !hasText(input.nif) || !hasText(input.emisorName) || !hasText(input.invoiceNumber)) {
-    return { valid: false, message: "Faltan los datos identificativos de la factura" };
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !hasText(input.nif) ||
+    !hasText(input.emisorName) ||
+    !hasText(input.invoiceNumber)
+  ) {
+    return { valid: false, message: 'Faltan los datos identificativos de la factura' }
   }
   if (!validDate(input.issueDate) || !validDate(input.generatedAt)) {
-    return { valid: false, message: "La fecha fiscal no es válida" };
+    return { valid: false, message: 'La fecha fiscal no es válida' }
   }
   if (!hasText(input.descriptionOperacion)) {
-    return { valid: false, message: "La descripción de la operación es obligatoria" };
+    return { valid: false, message: 'La descripción de la operación es obligatoria' }
   }
   if (!hasValidAmounts(input.vatLines, input.taxAmount, input.total)) {
-    return { valid: false, message: "El desglose de IVA no cuadra con los importes de la factura" };
+    return { valid: false, message: 'El desglose de IVA no cuadra con los importes de la factura' }
   }
-  const supportedTypes = new Set(["F1", "F2", "R1", "R2", "R3", "R4", "R5"]);
-  if (typeof input.invoiceType !== "string") {
-    return { valid: false, message: "El tipo de factura no es válido" };
+  const supportedTypes = new Set(['F1', 'F2', 'R1', 'R2', 'R3', 'R4', 'R5'])
+  if (typeof input.invoiceType !== 'string') {
+    return { valid: false, message: 'El tipo de factura no es válido' }
   }
   if (!supportedTypes.has(input.invoiceType)) {
     return {
       valid: false,
       message: `Tipo de factura ${input.invoiceType} no soportado aún por este SIF`,
-    };
+    }
   }
-  const rectificative = input.invoiceType.startsWith("R");
-  if (rectificative && input.rectificationType !== "S" && input.rectificationType !== "I") {
-    return { valid: false, message: "Una factura rectificativa requiere TipoRectificativa" };
+  const rectificative = input.invoiceType.startsWith('R')
+  if (rectificative && input.rectificationType !== 'S' && input.rectificationType !== 'I') {
+    return { valid: false, message: 'Una factura rectificativa requiere TipoRectificativa' }
   }
   if (
     input.rectificationAmounts &&
@@ -135,43 +144,54 @@ export function validateVerifactuSubmission(
       (input.rectificationAmounts.surcharge !== undefined &&
         !Number.isFinite(input.rectificationAmounts.surcharge)))
   ) {
-    return { valid: false, message: "Los importes de rectificación no son válidos" };
+    return { valid: false, message: 'Los importes de rectificación no son válidos' }
   }
-  if (input.subsanacion !== undefined && input.subsanacion !== "S" && input.subsanacion !== "N") {
-    return { valid: false, message: "Subsanacion debe ser S o N" };
+  if (input.subsanacion !== undefined && input.subsanacion !== 'S' && input.subsanacion !== 'N') {
+    return { valid: false, message: 'Subsanacion debe ser S o N' }
   }
-  if (input.rechazoPrevio !== undefined && !["N", "S", "X"].includes(input.rechazoPrevio)) {
-    return { valid: false, message: "RechazoPrevio debe ser N, S o X" };
+  if (input.rechazoPrevio !== undefined && !['N', 'S', 'X'].includes(input.rechazoPrevio)) {
+    return { valid: false, message: 'RechazoPrevio debe ser N, S o X' }
   }
-  if (!rectificative && (input.rectificationType || input.rectifiedInvoices?.length || input.substitutedInvoices?.length || input.rectificationAmounts)) {
-    return { valid: false, message: "Los datos de rectificación solo pueden usarse con una factura rectificativa" };
+  if (
+    !rectificative &&
+    (input.rectificationType ||
+      input.rectifiedInvoices?.length ||
+      input.substitutedInvoices?.length ||
+      input.rectificationAmounts)
+  ) {
+    return {
+      valid: false,
+      message: 'Los datos de rectificación solo pueden usarse con una factura rectificativa',
+    }
   }
   if (!validReferences(input.rectifiedInvoices) || !validReferences(input.substitutedInvoices)) {
-    return { valid: false, message: "Las referencias de facturas rectificadas no son válidas" };
+    return { valid: false, message: 'Las referencias de facturas rectificadas no son válidas' }
   }
-  if (input.rechazoPrevio === "X" && input.subsanacion !== "S") {
-    return { valid: false, message: "RechazoPrevio=X requiere Subsanacion=S" };
+  if (input.rechazoPrevio === 'X' && input.subsanacion !== 'S') {
+    return { valid: false, message: 'RechazoPrevio=X requiere Subsanacion=S' }
   }
   if (
     input.externalReference !== undefined &&
-    (typeof input.externalReference !== "string" ||
+    (typeof input.externalReference !== 'string' ||
       input.externalReference.trim().length === 0 ||
       input.externalReference.length > 60)
   ) {
-    return { valid: false, message: "La referencia externa debe tener entre 1 y 60 caracteres" };
+    return { valid: false, message: 'La referencia externa debe tener entre 1 y 60 caracteres' }
   }
-  if (input.invoiceType === "F1" && (!hasText(input.clientNif) || !hasText(input.clientName))) {
-    return { valid: false, message: "Una factura F1 requiere NIF y razón social del destinatario" };
+  if (input.invoiceType === 'F1' && (!hasText(input.clientNif) || !hasText(input.clientName))) {
+    return { valid: false, message: 'Una factura F1 requiere NIF y razón social del destinatario' }
   }
   const previousComplete =
     hasText(input.previousHash) &&
     hasText(input.previousInvoiceNumber) &&
     input.previousIssueDate !== null &&
-    validDate(input.previousIssueDate);
+    validDate(input.previousIssueDate)
   const previousEmpty =
-    !hasText(input.previousHash) && !hasText(input.previousInvoiceNumber) && input.previousIssueDate === null;
+    !hasText(input.previousHash) &&
+    !hasText(input.previousInvoiceNumber) &&
+    input.previousIssueDate === null
   if (!previousComplete && !previousEmpty) {
-    return { valid: false, message: "El encadenamiento anterior está incompleto" };
+    return { valid: false, message: 'El encadenamiento anterior está incompleto' }
   }
   if (
     !hasText(software.producerName) ||
@@ -181,9 +201,9 @@ export function validateVerifactuSubmission(
     !hasText(software.version) ||
     !hasText(software.installationNumber)
   ) {
-    return { valid: false, message: "La identidad del productor o del SIF no está configurada" };
+    return { valid: false, message: 'La identidad del productor o del SIF no está configurada' }
   }
-  return { valid: true };
+  return { valid: true }
 }
 
 export function validateVerifactuCancellation(
@@ -192,41 +212,43 @@ export function validateVerifactuCancellation(
 ): FiscalValidationResult {
   if (
     !input ||
-    typeof input !== "object" ||
+    typeof input !== 'object' ||
     !hasText(input.nif) ||
     !hasText(input.emisorName) ||
     !hasText(input.cancelledInvoiceNumber) ||
     !validDate(input.cancelledInvoiceIssueDate) ||
     !validDate(input.generatedAt)
   ) {
-    return { valid: false, message: "Los datos de anulación no son válidos" };
+    return { valid: false, message: 'Los datos de anulación no son válidos' }
   }
-  if (input.sinRegistroPrevio !== undefined && !["S", "N"].includes(input.sinRegistroPrevio)) {
-    return { valid: false, message: "SinRegistroPrevio debe ser S o N" };
+  if (input.sinRegistroPrevio !== undefined && !['S', 'N'].includes(input.sinRegistroPrevio)) {
+    return { valid: false, message: 'SinRegistroPrevio debe ser S o N' }
   }
-  if (input.rechazoPrevio !== undefined && !["S", "N"].includes(input.rechazoPrevio)) {
-    return { valid: false, message: "RechazoPrevio debe ser S o N" };
+  if (input.rechazoPrevio !== undefined && !['S', 'N'].includes(input.rechazoPrevio)) {
+    return { valid: false, message: 'RechazoPrevio debe ser S o N' }
   }
   if (
     input.externalReference !== undefined &&
-    (typeof input.externalReference !== "string" ||
+    (typeof input.externalReference !== 'string' ||
       input.externalReference.trim().length === 0 ||
       input.externalReference.length > 60)
   ) {
-    return { valid: false, message: "La referencia externa debe tener entre 1 y 60 caracteres" };
+    return { valid: false, message: 'La referencia externa debe tener entre 1 y 60 caracteres' }
   }
   const previousComplete =
     hasText(input.previousHash) &&
     hasText(input.previousInvoiceNumber) &&
     input.previousIssueDate !== null &&
-    validDate(input.previousIssueDate);
+    validDate(input.previousIssueDate)
   const previousEmpty =
-    !hasText(input.previousHash) && !hasText(input.previousInvoiceNumber) && input.previousIssueDate === null;
+    !hasText(input.previousHash) &&
+    !hasText(input.previousInvoiceNumber) &&
+    input.previousIssueDate === null
   if (!previousComplete && !previousEmpty) {
-    return { valid: false, message: "El encadenamiento anterior de la anulación está incompleto" };
+    return { valid: false, message: 'El encadenamiento anterior de la anulación está incompleto' }
   }
   if (!hasText(software.producerName) || !hasText(software.producerNif)) {
-    return { valid: false, message: "La identidad del productor del SIF no está configurada" };
+    return { valid: false, message: 'La identidad del productor del SIF no está configurada' }
   }
-  return { valid: true };
+  return { valid: true }
 }

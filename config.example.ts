@@ -7,7 +7,7 @@
  * `VerifactuConfig`. This is the single bridge between your app and the
  * (portable) Verifactu package.
  */
-import type { VerifactuConfig } from "@doscientos/verifactu";
+import type { VerifactuConfig } from '@doscientos/verifactu'
 
 /**
  * Builds a `VerifactuConfig` from your app's environment.
@@ -18,24 +18,24 @@ import type { VerifactuConfig } from "@doscientos/verifactu";
 export function verifactuConfigFromEnv(): VerifactuConfig {
   return {
     // "mock" (local QR route), "test" (AEAT preproduction) or "prod".
-    environment: (process.env.VERIFACTU_ENV as VerifactuConfig["environment"]) ?? "mock",
+    environment: (process.env.VERIFACTU_ENV as VerifactuConfig['environment']) ?? 'mock',
     certificate: {
       // PKCS#12 (.p12) client certificate, base64-encoded, + its passphrase.
-      p12Base64: process.env.VERIFACTU_CERT_P12_BASE64 ?? "",
-      password: process.env.VERIFACTU_CERT_PASSWORD ?? "",
+      p12Base64: process.env.VERIFACTU_CERT_P12_BASE64 ?? '',
+      password: process.env.VERIFACTU_CERT_PASSWORD ?? '',
     },
     software: {
       // The producer identity is distinct from the taxpayer that issues invoices.
-      producerName: process.env.VERIFACTU_PRODUCER_NAME ?? "",
-      producerNif: process.env.VERIFACTU_PRODUCER_NIF ?? "",
-      name: process.env.VERIFACTU_SOFTWARE_NAME ?? "",
-      id: process.env.VERIFACTU_SOFTWARE_ID ?? "",
-      version: process.env.VERIFACTU_SOFTWARE_VERSION ?? "",
-      installationNumber: process.env.VERIFACTU_INSTALLATION_NUMBER ?? "",
+      producerName: process.env.VERIFACTU_PRODUCER_NAME ?? '',
+      producerNif: process.env.VERIFACTU_PRODUCER_NIF ?? '',
+      name: process.env.VERIFACTU_SOFTWARE_NAME ?? '',
+      id: process.env.VERIFACTU_SOFTWARE_ID ?? '',
+      version: process.env.VERIFACTU_SOFTWARE_VERSION ?? '',
+      installationNumber: process.env.VERIFACTU_INSTALLATION_NUMBER ?? '',
       onlyVerifactu: true,
       multipleTaxpayers: false,
     },
     // Base URL of your app — used to build the mock QR verify route.
-    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-  };
+    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+  }
 }

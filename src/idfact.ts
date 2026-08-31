@@ -1,4 +1,4 @@
-import { spanishDate } from "./hash";
+import { spanishDate } from './hash'
 
 /**
  * IDFACT — Identificador Único de Registro de Facturación.
@@ -6,6 +6,6 @@ import { spanishDate } from "./hash";
  * Must appear on the invoice PDF and public portal (RD 1007/2023).
  */
 export function buildIdfact(nif: string, fullNumber: string, issueDate: Date): string {
-  const [dd, mm, yyyy] = spanishDate(issueDate).split("-");
-  return `${nif}-${fullNumber}-${yyyy}${mm}${dd}`;
+  const [dd, mm, yyyy] = spanishDate(issueDate).split('-')
+  return `${nif}-${fullNumber}-${yyyy}${mm}${dd}`
 }

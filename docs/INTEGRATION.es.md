@@ -78,7 +78,7 @@ const result = await deliverDurableVerifactuRecord(
   },
   verifactuConfigFromEnv(),
   logger,
-);
+)
 ```
 
 Esta función selecciona el snapshot SIF, decodifica el payload, recalcula la
