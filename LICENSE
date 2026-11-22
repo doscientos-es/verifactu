@@ -1,0 +1,52 @@
+Doscientos Attribution License (DAL) v1.0
+
+Copyright (c) 2026 Doscientos (https://doscientos.es). All rights reserved
+except as expressly granted below.
+
+1. GRANT
+Doscientos grants you a free, worldwide, non-exclusive, non-transferable,
+non-sublicensable license to install this package from the official npm
+registry and to use it, including commercially, unmodified, as a dependency
+of your own applications and services. You may build and distribute those
+applications in source or object form, provided this package is not itself
+redistributed (see section 3).
+
+2. ATTRIBUTION (CONDITION OF THE LICENSE)
+You must give Doscientos visible credit, for example "Built with
+@doscientos/<package> by Doscientos (https://doscientos.es)", in at least one
+of: your application's credits/about/legal page, its documentation, or its
+README. You must also keep this license and all copyright notices intact in
+every copy of the package you hold or distribute.
+
+3. RESTRICTIONS
+Unless Doscientos agrees in writing, you may not: (a) modify, fork, or create
+derivative works of the package itself; (b) redistribute, republish,
+sublicense, sell, or rent the package, alone or bundled as a library or
+component set; (c) offer the package's functionality as a competing library
+or as a service to third parties; or (d) remove or hide attribution.
+
+4. OWNERSHIP
+The package is and remains the property of Doscientos. No rights are granted
+other than those stated here. Third-party dependencies remain under their own
+licenses.
+
+5. NO WARRANTY; NO FISCAL OR LEGAL ADVICE
+The package is provided "as is", without warranty of any kind, express or
+implied. To the maximum extent permitted by law, Doscientos is not liable for
+indirect, incidental, special, or consequential damages. Using the package
+does not transfer to Doscientos any tax, accounting, or regulatory
+obligations of the user, including any responsible declaration (declaracion
+responsable) or compliance duties the user has under applicable law. Nothing
+here excludes liability that cannot legally be excluded.
+
+6. TERMINATION
+This license ends automatically if you breach it. You may restore it by
+curing the breach, unless Doscientos notifies you otherwise in writing.
+
+7. EARLIER VERSIONS
+Versions of this package published before this license took effect under the
+MIT License remain available under the MIT License for those versions only.
+
+8. LAW
+This license is governed by Spanish law. A separate written agreement signed
+by Doscientos prevails over this license to the extent it states so.

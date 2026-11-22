@@ -152,6 +152,6 @@ El trusted publisher de npm debe estar asociado al repositorio y al workflow
 Proteged `main` para exigir CI. El commit de versión se realiza con
 `github-actions[bot]` y el workflow lo ignora para evitar un ciclo de publicación.
 
-## License
+## Licencia y crédito
 
-MIT
+Licencia propia [DAL v1.0](./LICENSE): uso gratuito, también comercial, instalando el paquete desde npm sin modificarlo, a cambio de dar crédito visible a Doscientos (por ejemplo: «Built with @doscientos/verifactu by Doscientos — https://doscientos.es»). No se permite modificar, redistribuir ni ofrecer el paquete como servicio. Las versiones publicadas antes bajo MIT siguen siendo MIT.
