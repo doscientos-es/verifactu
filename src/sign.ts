@@ -1,20 +1,10 @@
-/**
- * XAdES-BES enveloped signature for Verifactu (HAC/1177/2024).
- *
- * Uses node-forge to load a PKCS12 certificate and sign the XML payload
- * with RSA-SHA256. The signature is embedded before the root closing tag.
- *
- * NOTE: This implementation computes the document digest on the raw UTF-8
- * bytes of the unsigned document. This is valid because:
- *   (a) We generate the XML deterministically (no declaration, no BOM).
- *   (b) The enveloped-signature transform removes the <ds:Signature> element
- *       before digest verification; since the signature is absent from the
- *       input, the digest covers exactly the canonical document bytes.
- */
+/** XAdES enveloped XML signatures. Fiscal compliance requires additional controls. */
 
-import { createHash } from 'node:crypto'
+import { createHash, createPublicKey, randomUUID, X509Certificate } from 'node:crypto'
 
+import { XMLValidator } from 'fast-xml-parser'
 import forge from 'node-forge'
+import { SignedXml } from 'xml-crypto'
 
 import { spanishTimestamp } from './hash'
 
@@ -23,6 +13,7 @@ const XADES_NS = 'http://uri.etsi.org/01903/v1.3.2#'
 const C14N_ALG = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
 const RSA_SHA256 = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256'
 const SHA256_ALG = 'http://www.w3.org/2001/04/xmlenc#sha256'
+const ENVELOPED = 'http://www.w3.org/2000/09/xmldsig#enveloped-signature'
 
 export interface P12Cert {
   certDerBase64: string // DER cert encoded in base64
@@ -76,21 +67,25 @@ export function loadP12Cert(p12Base64: string, password: string): P12Cert {
     .update(Buffer.from(certDerBase64, 'base64'))
     .digest('base64')
 
-  // RFC 4514: reverse attribute order
-  const issuerName = cert.issuer.attributes
-    .slice()
-    .reverse()
-    .map((a: forge.pki.CertificateField) => `${a.shortName}=${escapeRdn(String(a.value))}`)
-    .join(',')
-
-  // Serial number as decimal (forge gives hex without 0x prefix)
-  const serialNumber = BigInt(`0x${cert.serialNumber}`).toString(10)
-
-  return { certDerBase64, certDigestB64, issuerName, serialNumber, privateKey }
+  return { certDerBase64, certDigestB64, ...certificateIdentity(cert), privateKey }
 }
 
 function escapeRdn(v: string): string {
-  return v.replace(/[,+="\\<>;#]/g, (c) => `\\${c}`)
+  return v.replace(/[,+="\\<>;#]/g, (c) => `\\${c}`).replace(/^ | $/g, '\\ ')
+}
+
+function certificateIdentity(cert: forge.pki.Certificate) {
+  return {
+    issuerName: cert.issuer.attributes
+      .slice()
+      .reverse()
+      .map(
+        (attribute: forge.pki.CertificateField) =>
+          `${attribute.shortName ?? attribute.type}=${escapeRdn(String(attribute.value))}`,
+      )
+      .join(','),
+    serialNumber: BigInt(`0x${cert.serialNumber}`).toString(10),
+  }
 }
 
 function escapeXml(s: string): string {
@@ -109,97 +104,81 @@ function buildSignedProperties(cert: P12Cert, signingTime: Date, id: string): st
     `<xades:SignedProperties xmlns:xades="${XADES_NS}" Id="${id}">` +
     `<xades:SignedSignatureProperties>` +
     `<xades:SigningTime>${time}</xades:SigningTime>` +
-    `<xades:SigningCertificateV2>` +
+    `<xades:SigningCertificate>` +
     `<xades:Cert>` +
     `<xades:CertDigest>` +
     `<ds:DigestMethod xmlns:ds="${DS_NS}" Algorithm="${SHA256_ALG}"/>` +
     `<ds:DigestValue xmlns:ds="${DS_NS}">${cert.certDigestB64}</ds:DigestValue>` +
     `</xades:CertDigest>` +
-    `<xades:IssuerSerialV2>` +
+    `<xades:IssuerSerial>` +
     `<ds:X509IssuerName xmlns:ds="${DS_NS}">${escapeXml(cert.issuerName)}</ds:X509IssuerName>` +
     `<ds:X509SerialNumber xmlns:ds="${DS_NS}">${cert.serialNumber}</ds:X509SerialNumber>` +
-    '</xades:IssuerSerialV2>' +
+    '</xades:IssuerSerial>' +
     `</xades:Cert>` +
-    `</xades:SigningCertificateV2>` +
+    `</xades:SigningCertificate>` +
     `</xades:SignedSignatureProperties>` +
     '</xades:SignedProperties>'
-  )
-}
-
-function buildSignedInfo(
-  sigId: string,
-  spropsId: string,
-  docDigest: string,
-  propsDigest: string,
-): string {
-  return (
-    `<ds:SignedInfo xmlns:ds="${DS_NS}">` +
-    `<ds:CanonicalizationMethod Algorithm="${C14N_ALG}"/>` +
-    `<ds:SignatureMethod Algorithm="${RSA_SHA256}"/>` +
-    `<ds:Reference Id="${sigId}-REF-DOC" URI="">` +
-    `<ds:Transforms>` +
-    `<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>` +
-    `<ds:Transform Algorithm="${C14N_ALG}"/>` +
-    `</ds:Transforms>` +
-    `<ds:DigestMethod Algorithm="${SHA256_ALG}"/>` +
-    `<ds:DigestValue>${docDigest}</ds:DigestValue>` +
-    `</ds:Reference>` +
-    `<ds:Reference Id="${sigId}-REF-XADES" Type="http://uri.etsi.org/01903#SignedProperties" URI="#${spropsId}">` +
-    `<ds:DigestMethod Algorithm="${SHA256_ALG}"/>` +
-    `<ds:DigestValue>${propsDigest}</ds:DigestValue>` +
-    `</ds:Reference>` +
-    `</ds:SignedInfo>`
   )
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Embed an XAdES-BES enveloped signature inside `unsignedXml`.
- * The signature element is inserted just before the root closing tag.
+ * Sign an unsigned XML document, including its XAdES signed properties.
+ * This primitive does not by itself implement or certify a fiscal system.
  */
 export function signXml(unsignedXml: string, cert: P12Cert, signingTime?: Date): string {
   const now = signingTime ?? new Date()
-  const docBuf = Buffer.from(unsignedXml, 'utf8')
-  const sigId = `SIG-${createHash('sha256').update(docBuf).digest('hex').slice(0, 8).toUpperCase()}`
+  if (
+    !Number.isFinite(now.getTime()) ||
+    /<!DOCTYPE/i.test(unsignedXml) ||
+    /<(?:[A-Za-z_][\w.-]*:)?Signature(?:\s|\/|>)/.test(unsignedXml) ||
+    XMLValidator.validate(unsignedXml) !== true
+  )
+    throw new Error('signXml: invalid or already signed XML')
+
+  const certBytes = Buffer.from(cert.certDerBase64, 'base64')
+  const certificate = new X509Certificate(certBytes)
+  const privateKey = forge.pki.privateKeyToPem(cert.privateKey)
+  const publicKey = createPublicKey(privateKey).export({ type: 'spki', format: 'der' })
+  if (
+    !publicKey.equals(certificate.publicKey.export({ type: 'spki', format: 'der' })) ||
+    createHash('sha256').update(certBytes).digest('base64') !== cert.certDigestB64
+  )
+    throw new Error('signXml: certificate and private key do not match')
+
+  const parsed = forge.pki.certificateFromAsn1(forge.asn1.fromDer(certBytes.toString('binary')))
+  const signingCert = { ...cert, ...certificateIdentity(parsed) }
+
+  const sigId = `SIG-${randomUUID()}`
   const spropsId = `${sigId}-SPROPS`
-
-  // 1. Document digest (unsigned XML bytes)
-  const docDigest = sha256b64(docBuf)
-
-  // 2. SignedProperties digest
-  const signedPropsXml = buildSignedProperties(cert, now, spropsId)
-  const propsDigest = sha256b64(Buffer.from(signedPropsXml, 'utf8'))
-
-  // 3. Build and sign SignedInfo
-  const signedInfoXml = buildSignedInfo(sigId, spropsId, docDigest, propsDigest)
-  const md = forge.md.sha256.create()
-  md.update(signedInfoXml, 'utf8')
-  const signatureB64 = Buffer.from(cert.privateKey.sign(md), 'binary').toString('base64')
-
-  // 4. Assemble full ds:Signature element
-  const signatureEl =
-    `<ds:Signature xmlns:ds="${DS_NS}" Id="${sigId}">` +
-    signedInfoXml +
-    `<ds:SignatureValue Id="${sigId}-VALUE">${signatureB64}</ds:SignatureValue>` +
-    `<ds:KeyInfo>` +
-    `<ds:X509Data>` +
-    `<ds:X509Certificate>${cert.certDerBase64}</ds:X509Certificate>` +
-    `</ds:X509Data>` +
-    `</ds:KeyInfo>` +
-    `<ds:Object Id="${sigId}-OBJ">` +
-    `<xades:QualifyingProperties xmlns:xades="${XADES_NS}" Target="#${sigId}">` +
-    signedPropsXml +
-    `</xades:QualifyingProperties>` +
-    `</ds:Object>` +
-    `</ds:Signature>`
-
-  // 5. Embed before root closing tag
-  const lastClose = unsignedXml.lastIndexOf('</')
-  if (lastClose === -1) throw new Error('signXml: cannot locate root closing tag')
-  return unsignedXml.slice(0, lastClose) + signatureEl + unsignedXml.slice(lastClose)
-}
-
-function sha256b64(buf: Buffer): string {
-  return createHash('sha256').update(buf).digest('base64')
+  const signer = new SignedXml({
+    privateKey,
+    publicCert: certificate.toString(),
+    canonicalizationAlgorithm: C14N_ALG,
+    signatureAlgorithm: RSA_SHA256,
+    objects: [
+      {
+        content:
+          `<xades:QualifyingProperties xmlns:xades="${XADES_NS}" Target="#${sigId}">` +
+          buildSignedProperties(signingCert, now, spropsId) +
+          '</xades:QualifyingProperties>',
+      },
+    ],
+  })
+  signer.addReference({
+    xpath: '/*',
+    isEmptyUri: true,
+    id: `${sigId}-REF-DOC`,
+    transforms: [ENVELOPED, C14N_ALG],
+    digestAlgorithm: SHA256_ALG,
+  })
+  signer.addReference({
+    xpath: `//*[@Id='${spropsId}']`,
+    type: 'http://uri.etsi.org/01903#SignedProperties',
+    transforms: [C14N_ALG],
+    digestAlgorithm: SHA256_ALG,
+  })
+  signer.computeSignature(unsignedXml, { prefix: 'ds', attrs: { Id: sigId } })
+  return signer.getSignedXml()
 }
