@@ -74,6 +74,16 @@ describe('XAdES XML signing', () => {
     expect(verify(signXml(input, loadP12Cert(testP12, 'test-password'), time))).toBe(true)
   })
 
+  it('derives the signed certificate identity from the certificate, not supplied metadata', () => {
+    const signed = signXml(xml, { ...cert, issuerName: 'CN=Wrong', serialNumber: '999' }, time)
+    expect(verify(signed)).toBe(true)
+    expect(signed).toContain('CN=Test issuer')
+    expect(signed).not.toContain('CN=Wrong')
+    expect(signed).toContain(
+      '<ds:X509SerialNumber xmlns:ds="http://www.w3.org/2000/09/xmldsig#">1</ds:X509SerialNumber>',
+    )
+  })
+
   it('rejects malformed XML, DTDs, existing signatures and mismatched certificates', () => {
     expect(() => signXml('<record><value></record>', cert, time)).toThrow()
     expect(() => signXml('<!DOCTYPE record><record/>', cert, time)).toThrow()
